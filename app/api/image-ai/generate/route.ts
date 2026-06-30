@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v4 as uuidv4 } from 'uuid'
 import { insert } from '@/lib/supabase'
+import { creditUserCoins, deductUserCoins, ensureUserHasCoins, getImageCoinCost } from '@/lib/coins'
 import { getUserFromRequest } from '@/middleware/auth'
 
 export async function POST(req: NextRequest) {
@@ -26,6 +27,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Width and height must be numbers' }, { status: 400 })
     }
 
+    const coinsUsed = getImageCoinCost(width, height)
+    try {
+      await ensureUserHasCoins(user.id, coinsUsed)
+    } catch (coinError: any) {
+      return NextResponse.json(
+        { error: coinError.message ?? 'Insufficient coins' },
+        { status: coinError.status ?? 500 }
+      )
+    }
+
     const IMAGE_API_KEY = process.env.IMAGE_API_KEY
     const IMAGE_API_URL = (process.env.IMAGE_API_URL || '').replace(/\/+$/, '')
     const IMAGE_MODEL = process.env.IMAGE_MODEL || 'carubra/image'
@@ -43,6 +54,7 @@ export async function POST(req: NextRequest) {
       steps,
       cfg_scale,
       status: 'processing',
+      coins_used: coinsUsed,
       created_at: new Date(),
     }
 
@@ -121,9 +133,24 @@ export async function POST(req: NextRequest) {
         image_url: imageUrl,
       }
 
-      await insert('images', completedImage)
+      let remainingCoins: number
+      try {
+        remainingCoins = await deductUserCoins(user.id, coinsUsed)
+      } catch (coinError: any) {
+        return NextResponse.json(
+          { error: coinError.message ?? 'Unable to deduct coins' },
+          { status: coinError.status ?? 500 }
+        )
+      }
 
-      return NextResponse.json({ image: { ...completedImage, imageUrl } }, { status: 201 })
+      try {
+        await insert('images', completedImage)
+      } catch (dbError) {
+        await creditUserCoins(user.id, coinsUsed).catch(() => null)
+        throw dbError
+      }
+
+      return NextResponse.json({ image: { ...completedImage, imageUrl }, coins: remainingCoins }, { status: 201 })
     } catch (error: any) {
       newImage.status = 'failed'
       console.error('[image-ai] Error:', error)

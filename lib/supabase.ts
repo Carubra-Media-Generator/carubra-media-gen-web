@@ -3,20 +3,27 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 let supabaseClient: SupabaseClient | null = null
 
+const getSupabaseUrl = () => process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL
+const getSupabaseAnonKey = () => process.env.SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
 export async function getSupabase(): Promise<SupabaseClient> {
   if (!supabaseClient) {
-    const supabaseUrl = process.env.SUPABASE_URL
-    const supabaseKey = process.env.SUPABASE_ANON_KEY
-    if (!supabaseUrl || !supabaseKey) throw new Error('SUPABASE_URL and SUPABASE_ANON_KEY are required')
+    const supabaseUrl = getSupabaseUrl()
+    const supabaseKey = getSupabaseAnonKey()
+    if (!supabaseUrl || !supabaseKey) {
+      throw new Error('SUPABASE_URL/NEXT_PUBLIC_SUPABASE_URL and SUPABASE_ANON_KEY/NEXT_PUBLIC_SUPABASE_ANON_KEY are required')
+    }
     supabaseClient = createClient(supabaseUrl, supabaseKey)
   }
   return supabaseClient
 }
 
 export async function getSupabaseAdmin(): Promise<SupabaseClient> {
-  const supabaseUrl = process.env.SUPABASE_URL
+  const supabaseUrl = getSupabaseUrl()
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!supabaseUrl || !supabaseServiceKey) throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required')
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error('SUPABASE_URL/NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required')
+  }
   return createClient(supabaseUrl, supabaseServiceKey)
 }
 

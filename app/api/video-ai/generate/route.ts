@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v4 as uuidv4 } from 'uuid'
 import { insert } from '@/lib/supabase'
+import { creditUserCoins, deductUserCoins, ensureUserHasCoins, getVideoCoinCost } from '@/lib/coins'
 import { getUserFromRequest } from '@/middleware/auth'
 
 export async function POST(req: NextRequest) {
@@ -8,10 +9,20 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   try {
-    const { prompt, style, duration } = await req.json()
+    const { prompt, style, duration, resolution = '480p' } = await req.json()
 
     if (!prompt || typeof prompt !== 'string') {
       return NextResponse.json({ error: 'Prompt is required' }, { status: 400 })
+    }
+
+    const coinsUsed = getVideoCoinCost(resolution)
+    try {
+      await ensureUserHasCoins(user.id, coinsUsed)
+    } catch (coinError: any) {
+      return NextResponse.json(
+        { error: coinError.message ?? 'Insufficient coins' },
+        { status: coinError.status ?? 500 }
+      )
     }
 
     const VIDEO_API_KEY = process.env.VIDEO_OPENROUTER_API_KEY || process.env.VIDEO_API_KEY
@@ -32,8 +43,11 @@ export async function POST(req: NextRequest) {
       id: uuidv4(),
       user_id: user.id,
       prompt,
-      style,
+      model: 'text-to-video',
+      resolution,
+      aspect_ratio: style ? style.replace('-', ':') : '16:9',
       duration,
+      coins_used: coinsUsed,
       status: 'processing',
       created_at: new Date(),
     }
@@ -100,7 +114,23 @@ export async function POST(req: NextRequest) {
         job_id: jobId,
         status: 'processing',
       }
-      await insert('videos', finalVideo)
+
+      let remainingCoins: number
+      try {
+        remainingCoins = await deductUserCoins(user.id, coinsUsed)
+      } catch (coinError: any) {
+        return NextResponse.json(
+          { error: coinError.message ?? 'Unable to deduct coins' },
+          { status: coinError.status ?? 500 }
+        )
+      }
+
+      try {
+        await insert('videos', finalVideo)
+      } catch (dbError) {
+        await creditUserCoins(user.id, coinsUsed).catch(() => null)
+        throw dbError
+      }
 
       // Return 202
       return NextResponse.json({
@@ -108,7 +138,8 @@ export async function POST(req: NextRequest) {
           id: finalVideo.id,
           jobId,
           status: 'processing',
-        }
+        },
+        coins: remainingCoins,
       }, { status: 202 })
 
     } catch (error: any) {

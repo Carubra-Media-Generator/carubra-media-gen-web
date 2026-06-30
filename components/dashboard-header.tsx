@@ -8,6 +8,8 @@ import { Coins, ShoppingCart } from "lucide-react"
 import React from "react"
 // Logo is in sidebar; header will not render it
 
+const BALANCE_UPDATED_EVENT = 'carubra-balance-updated'
+
 export function DashboardHeader() {
   const router = useRouter()
   const { user } = useAuth()
@@ -43,8 +45,18 @@ export function DashboardHeader() {
     }
 
     readCart()
+    const updateBalance = (event: Event) => {
+      const coins = (event as CustomEvent<{ coins?: number }>).detail?.coins
+      if (typeof coins === 'number') setCoins(coins)
+      else fetchBalance()
+    }
+
     window.addEventListener('storage', readCart)
-    return () => window.removeEventListener('storage', readCart)
+    window.addEventListener(BALANCE_UPDATED_EVENT, updateBalance)
+    return () => {
+      window.removeEventListener('storage', readCart)
+      window.removeEventListener(BALANCE_UPDATED_EVENT, updateBalance)
+    }
   }, [])
 
   const initials = user?.name ? user.name.split(" ").map(n => n[0]).slice(0,2).join("") : (user?.email ? user.email[0].toUpperCase() : "U")

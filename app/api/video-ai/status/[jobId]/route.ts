@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { updateOne } from '@/lib/supabase'
+import { findOne, updateOne } from '@/lib/supabase'
+import { creditUserCoins } from '@/lib/coins'
 import { getUserFromRequest } from '@/middleware/auth'
 
 export async function GET(
@@ -59,11 +60,15 @@ export async function GET(
 
     if (pollData.status === 'failed') {
       try {
+        const existingVideo = await findOne('videos', { job_id: jobId })
         await updateOne(
           'videos',
           { job_id: jobId },
           { status: 'failed' }
         )
+        if (existingVideo?.user_id === user.id && existingVideo.status !== 'failed' && Number(existingVideo.coins_used ?? 0) > 0) {
+          await creditUserCoins(user.id, Number(existingVideo.coins_used))
+        }
       } catch (dbErr) {
         console.error('[video-ai] Failed to update failed status in DB:', dbErr)
       }

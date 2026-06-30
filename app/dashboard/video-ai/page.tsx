@@ -371,6 +371,11 @@ export default function VideoAIPage() {
     }
   }
 
+  const updateCoinBalance = (coins: number) => {
+    setCoinBalance(coins)
+    window.dispatchEvent(new CustomEvent("carubra-balance-updated", { detail: { coins } }))
+  }
+
   // ─── Load history from backend ─────────────────────────────────────────────
   useEffect(() => {
     const token = localStorage.getItem("carubra-token")
@@ -537,7 +542,7 @@ export default function VideoAIPage() {
       const response = await fetch("/api/video-ai/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ prompt: script, style: ratio, duration: parseInt(duration) }),
+        body: JSON.stringify({ prompt: script, style: ratio, duration: parseInt(duration), resolution }),
       })
 
       if (!response.ok) {
@@ -556,6 +561,7 @@ export default function VideoAIPage() {
       const data = await response.json()
       const videoId: string  = data?.video?.id    ?? tempId
       const jobId:   string  = data?.video?.jobId ?? ""
+      if (typeof data?.coins === "number") updateCoinBalance(data.coins)
 
       await reportAiUsage({
         apiName: 'video-ai.generate',
@@ -640,12 +646,13 @@ export default function VideoAIPage() {
       const response = await fetch("/api/video-ai/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ prompt: newScript, style: item.ratio, duration: item.duration }),
+        body: JSON.stringify({ prompt: newScript, style: item.ratio, duration: item.duration, resolution: item.resolution }),
       })
       if (!response.ok) throw new Error("Failed")
       const data = await response.json()
       const videoId: string = data?.video?.id    ?? item.id
       const jobId:   string = data?.video?.jobId ?? ""
+      if (typeof data?.coins === "number") updateCoinBalance(data.coins)
 
       await reportAiUsage({
         apiName: 'video-ai.generate',
@@ -689,11 +696,6 @@ export default function VideoAIPage() {
             Video AI
           </h1>
           <p className="text-muted-foreground mt-1">Buat video dengan AI dari deskripsi teks</p>
-        </div>
-        <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-2">
-          <Coins className="h-5 w-5 text-amber-500" />
-          <span className="font-bold text-amber-700 dark:text-amber-400 text-lg">{coinBalance}</span>
-          <span className="text-amber-600/70 dark:text-amber-500/70 text-sm">koin</span>
         </div>
       </div>
 
