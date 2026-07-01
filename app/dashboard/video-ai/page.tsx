@@ -380,25 +380,30 @@ export default function VideoAIPage() {
   useEffect(() => {
     const token = localStorage.getItem("carubra-token")
     if (!token) return
+
     fetch("/api/users/balance", { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
+      .then(data => setCoinBalance(data.coins ?? 0))
+      .catch(() => {})
+
+    fetch("/api/video-ai", { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
       .then(data => {
-        setCoinBalance(data.coins ?? 0)
         const items: VideoItem[] = (data.videos || []).map((v: any) => ({
           id: v.id,
-          jobId: v.jobId,
+          jobId: v.job_id || v.jobId,
           title: v.prompt?.slice(0, 40) || "Video",
           script: v.prompt || "",
-          resolution: "480p" as Resolution,
-          ratio: v.style || "16-9",
-          model: "text-to-video" as VideoModel,
+          resolution: (v.resolution || "480p") as Resolution,
+          ratio: v.aspect_ratio || v.style || "16-9",
+          model: (v.model || "text-to-video") as VideoModel,
           duration: v.duration || 30,
-          coinCost: 2,
+          coinCost: v.coins_used || 2,
           status: v.status === "completed" ? "completed" : v.status === "failed" ? "failed" : "generating",
           completedTime: null,
           caption: v.caption || "",
-          createdAt: new Date(v.createdAt),
-          videoUrl: v.videoUrl,
+          createdAt: new Date(v.created_at || v.createdAt),
+          videoUrl: v.video_url || v.videoUrl,
         }))
         setHistory(items)
 

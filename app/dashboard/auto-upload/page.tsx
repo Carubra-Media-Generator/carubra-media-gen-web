@@ -51,6 +51,7 @@ type GeneratedContent = {
   mediaUrl: string
   mediaType: "image" | "video"
   prompt: string
+  caption?: string
   createdAt: string
 }
 
@@ -612,10 +613,10 @@ ${data.errors.join('\n')}` : message)
               </Label>
               <div className="flex gap-2 items-center">
                 <label className={cn("px-3 py-1 rounded-lg border cursor-pointer text-sm", mediaSource === 'upload' ? 'border-primary bg-primary/10' : 'border-border')}>
-                  <input type="radio" name="mediaSource" className="sr-only" checked={mediaSource === 'upload'} onChange={() => setMediaSource('upload')} /> Upload
+                  <input type="radio" name="mediaSource" className="sr-only" checked={mediaSource === 'upload'} onChange={() => { setMediaSource('upload'); setSelectedGeneratedContent(null); setCaption('') }} /> Upload
                 </label>
                 <label className={cn("px-3 py-1 rounded-lg border cursor-pointer text-sm", mediaSource === 'generated' ? 'border-primary bg-primary/10' : 'border-border')}>
-                  <input type="radio" name="mediaSource" className="sr-only" checked={mediaSource === 'generated'} onChange={() => setMediaSource('generated')} /> Generated
+                  <input type="radio" name="mediaSource" className="sr-only" checked={mediaSource === 'generated'} onChange={() => { setMediaSource('generated'); setMediaFile(null); setMediaPreview(null); setCaption('') }} /> Generated
                 </label>
               </div>
 
@@ -665,8 +666,45 @@ ${data.errors.join('\n')}` : message)
                     <div className="col-span-3 text-sm text-muted-foreground">Belum ada konten generated.</div>
                   ) : (
                     generatedContents.map(c => (
-                      <button key={c._id} onClick={() => { setSelectedGeneratedContent(c); setMediaPreview(c.mediaUrl) }} className={cn("border rounded-lg overflow-hidden", selectedGeneratedContent?._id === c._id ? 'border-primary' : 'border-border')}>
-                        <img src={c.mediaUrl} alt={c.prompt} className="w-full h-24 object-cover" />
+                      <button key={c._id} onClick={async () => {
+                        setSelectedGeneratedContent(c)
+                        setMediaPreview(c.mediaUrl)
+                        if (c.caption) {
+                          // Caption already saved — auto-fill immediately
+                          setCaption(c.caption)
+                        } else {
+                          // Fallback: generate caption on-the-fly, save it, then fill
+                          try {
+                            const token = localStorage.getItem('carubra-token')
+                            const endpoint = c.mediaType === 'image'
+                              ? '/api/image-ai/caption'
+                              : '/api/video-ai/caption'
+                            const body = c.mediaType === 'image'
+                              ? { imageUrl: c.mediaUrl, prompt: c.prompt, imageId: c._id }
+                              : { script: c.prompt, videoId: c._id }
+                            const res = await fetch(endpoint, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                              body: JSON.stringify(body),
+                            })
+                            const data = await res.json()
+                            if (data.caption) {
+                              setCaption(data.caption)
+                              // Update local state so future clicks don't re-generate
+                              setGeneratedContents(prev => prev.map(item =>
+                                item._id === c._id ? { ...item, caption: data.caption } : item
+                              ))
+                            }
+                          } catch {
+                            // Ignore caption generation failure — user can type manually
+                          }
+                        }
+                      }} className={cn("border rounded-lg overflow-hidden text-left", selectedGeneratedContent?._id === c._id ? 'border-primary' : 'border-border')}>
+                        {c.mediaType === 'video' ? (
+                          <video src={c.mediaUrl} className="w-full h-24 object-cover" muted />
+                        ) : (
+                          <img src={c.mediaUrl} alt={c.prompt} className="w-full h-24 object-cover" />
+                        )}
                         <div className="p-2 text-xs text-muted-foreground">{c.prompt?.slice(0, 60)}</div>
                       </button>
                     ))

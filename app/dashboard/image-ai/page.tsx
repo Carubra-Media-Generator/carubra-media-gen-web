@@ -198,22 +198,19 @@ function DetailModal({
                 </div>
 
                 <div>
-                  <p className="text-xs font-semibold text-muted-foreground mb-1.5">PROMPT</p>
-                  <p className="text-sm leading-relaxed bg-muted/40 rounded-lg px-3 py-2">{item.prompt}</p>
-                </div>
-
-                {item.caption && (
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <p className="text-xs font-semibold text-muted-foreground">CAPTION</p>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-xs font-semibold text-muted-foreground">CAPTION</p>
+                    {item.caption && (
                       <button onClick={() => navigator.clipboard.writeText(item.caption)}
                         className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors">
                         <Copy className="h-3 w-3" /> Copy
                       </button>
-                    </div>
-                    <p className="text-sm leading-relaxed bg-muted/40 rounded-lg px-3 py-2 whitespace-pre-line">{item.caption}</p>
+                    )}
                   </div>
-                )}
+                  <p className="text-sm leading-relaxed bg-muted/40 rounded-lg px-3 py-2 whitespace-pre-line">
+                    {item.caption || (item.status === "generating" ? "Menyiapkan caption..." : "Tidak ada caption.")}
+                  </p>
+                </div>
 
                 <div className="mt-auto flex flex-col gap-2">
                   <div className="flex gap-2">
@@ -599,7 +596,14 @@ export default function ImageAIPage() {
     }
   }
 
-  const openDetail = (item: HistoryItem) => { setDetailItem(item); setDetailOpen(true) }
+  const openDetail = (item: HistoryItem) => {
+    setDetailItem(item)
+    setDetailOpen(true)
+    // Fallback: if completed image has no caption, auto-generate one
+    if (item.status === "success" && item.imageUrl && !item.caption) {
+      handleGenerateCaption(item.imageUrl, item.prompt, item.id)
+    }
+  }
 
   const formatDuration = (ms: number | null) => {
     if (ms === null) return "—"

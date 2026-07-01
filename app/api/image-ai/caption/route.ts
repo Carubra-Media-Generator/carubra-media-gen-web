@@ -27,12 +27,16 @@ export async function POST(req: NextRequest) {
         model: CAPTION_MODEL,
         messages: [
           {
+            role: 'system',
+            content: 'You are a social media content writer. Write engaging captions that feel natural and human. Always include relevant emojis and 3-5 hashtags at the end. Match the language of the user\'s prompt (if the prompt is in Indonesian, write in Indonesian; if in English, write in English; etc). Never copy the prompt word-for-word. Write as if you are the person who created this content posting it on Instagram or TikTok.',
+          },
+          {
             role: 'user',
             content: [
               { type: 'image_url', image_url: { url: imageUrl } },
               {
                 type: 'text',
-                text: `Buatkan caption menarik untuk gambar ini berdasarkan deskripsi: "${prompt}". Balas hanya caption saja tanpa penjelasan.`,
+                text: `Tulis caption media sosial yang menarik dan natural untuk gambar ini. Prompt asli pengguna: "${prompt}". Jangan hanya mengulangi prompt-nya. Buat caption yang terasa autentik seperti postingan nyata di Instagram.`,
               },
             ],
           },

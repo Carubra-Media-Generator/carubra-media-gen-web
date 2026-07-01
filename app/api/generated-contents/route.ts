@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
         mediaUrl: doc.image_url,
         mediaType: 'image',
         prompt: doc.prompt,
+        caption: doc.caption || '',
         createdAt: doc.created_at,
       })),
       ...videos.filter((doc: any) => doc.status === 'completed').map((doc: any) => ({
@@ -23,6 +24,7 @@ export async function GET(req: NextRequest) {
         mediaUrl: doc.video_url,
         mediaType: 'video',
         prompt: doc.prompt,
+        caption: doc.caption || '',
         createdAt: doc.created_at,
       }))
     ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())

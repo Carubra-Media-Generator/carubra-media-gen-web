@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { find } from '@/lib/supabase'
 import { getUserFromRequest } from '@/middleware/auth'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(req: NextRequest) {
   const user = getUserFromRequest(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

@@ -27,8 +27,12 @@ export async function POST(req: NextRequest) {
         model: CAPTION_MODEL,
         messages: [
           {
+            role: 'system',
+            content: 'You are a social media content writer. Write engaging captions that feel natural and human. Always include relevant emojis and 3-5 hashtags at the end. Match the language of the user\'s description (Indonesian or English). Never copy the description word-for-word. Write as if you are the video creator posting it on TikTok or Instagram Reels.',
+          },
+          {
             role: 'user',
-            content: `Buatkan caption media sosial yang menarik dalam Bahasa Indonesia untuk video dengan deskripsi berikut. Caption harus singkat, engaging, dan sertakan 3-5 hashtag relevan. Balas HANYA dengan caption-nya saja, tanpa penjelasan tambahan.\n\nDeskripsi: "${script}"`,
+            content: `Tulis caption media sosial yang menarik dan natural untuk video ini berdasarkan deskripsi: "${script}". Jangan hanya mengulangi deskripsinya. Buat caption yang autentik seperti postingan nyata di TikTok atau Instagram Reels. Sertakan emoji dan 3-5 hashtag relevan.`,
           },
         ],
         max_tokens: 300,
