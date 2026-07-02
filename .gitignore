@@ -8,6 +8,7 @@
 .env.test.local
 .env.production.local
 .env.*.example
+credentials/
 
 # ==========================================
 # NODE.JS & DEPENDENCIES
@@ -117,3 +118,5 @@ storybook-static/
 # ==========================================
 .npm
 dist/
+
+/credentials

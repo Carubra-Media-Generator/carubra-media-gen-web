@@ -203,18 +203,20 @@ function DetailModal({
                   <p className="text-sm leading-relaxed bg-muted/40 rounded-lg px-3 py-2">{item.script}</p>
                 </div>
 
-                {item.caption && (
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <p className="text-xs font-semibold text-muted-foreground">CAPTION</p>
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-xs font-semibold text-muted-foreground">CAPTION</p>
+                    {item.caption && (
                       <button onClick={() => navigator.clipboard.writeText(item.caption)}
                         className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors">
                         <Copy className="h-3 w-3" /> Copy
                       </button>
-                    </div>
-                    <p className="text-sm leading-relaxed bg-muted/40 rounded-lg px-3 py-2 whitespace-pre-line">{item.caption}</p>
+                    )}
                   </div>
-                )}
+                  <p className="text-sm leading-relaxed bg-muted/40 rounded-lg px-3 py-2 whitespace-pre-line">
+                    {item.caption || (item.status === "generating" ? "Menyiapkan caption..." : "Tidak ada caption.")}
+                  </p>
+                </div>
 
                 <div className="mt-auto flex flex-col gap-2">
                   {connectedSocmed.length > 0 && item.status === "completed" && (
@@ -433,7 +435,7 @@ export default function VideoAIPage() {
 
     const token = localStorage.getItem("carubra-token")
     let attempts = 0
-    const maxAttempts = 60 // 60 × 10s = 10 menit max
+    const maxAttempts = 120 // 120 × 10s = 20 menit max
 
     const interval = setInterval(async () => {
       attempts++
@@ -681,7 +683,14 @@ export default function VideoAIPage() {
     }
   }
 
-  const openDetail = (item: VideoItem) => { setDetailItem(item); setDetailOpen(true) }
+  const openDetail = (item: VideoItem) => {
+    setDetailItem(item)
+    setDetailOpen(true)
+    // Fallback: if completed video has no caption, auto-generate one
+    if (item.status === "completed" && !item.caption) {
+      handleGenerateCaption(item.script, item.id)
+    }
+  }
 
   const formatTime = (seconds: number | null) => {
     if (seconds === null) return "—"

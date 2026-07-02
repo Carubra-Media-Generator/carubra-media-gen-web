@@ -232,6 +232,8 @@ export default function AutoUploadPage() {
   const [mediaPreview, setMediaPreview] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+  const [isGeneratingCaption, setIsGeneratingCaption] = useState(false)
+  const [captionError, setCaptionError] = useState<string | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -412,6 +414,8 @@ export default function AutoUploadPage() {
     setMediaFile(null)
     setMediaPreview(null)
     setFormError(null)
+    setIsGeneratingCaption(false)
+    setCaptionError(null)
   }
 
   const handleSubmit = async (asDraft = false) => {
@@ -669,11 +673,13 @@ ${data.errors.join('\n')}` : message)
                       <button key={c._id} onClick={async () => {
                         setSelectedGeneratedContent(c)
                         setMediaPreview(c.mediaUrl)
+                        setCaptionError(null)
                         if (c.caption) {
                           // Caption already saved — auto-fill immediately
                           setCaption(c.caption)
                         } else {
                           // Fallback: generate caption on-the-fly, save it, then fill
+                          setIsGeneratingCaption(true)
                           try {
                             const token = localStorage.getItem('carubra-token')
                             const endpoint = c.mediaType === 'image'
@@ -694,12 +700,22 @@ ${data.errors.join('\n')}` : message)
                               setGeneratedContents(prev => prev.map(item =>
                                 item._id === c._id ? { ...item, caption: data.caption } : item
                               ))
+                            } else {
+                              setCaptionError("Gagal membuat caption. Silakan tulis manual.")
                             }
-                          } catch {
-                            // Ignore caption generation failure — user can type manually
+                          } catch (err) {
+                            console.error("Caption generation error:", err)
+                            setCaptionError("Gagal membuat caption. Silakan tulis manual.")
+                          } finally {
+                            setIsGeneratingCaption(false)
                           }
                         }
-                      }} className={cn("border rounded-lg overflow-hidden text-left", selectedGeneratedContent?._id === c._id ? 'border-primary' : 'border-border')}>
+                      }} className={cn("border rounded-lg overflow-hidden text-left relative", selectedGeneratedContent?._id === c._id ? 'border-primary' : 'border-border')}>
+                        {isGeneratingCaption && selectedGeneratedContent?._id === c._id && (
+                          <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10">
+                            <Loader2 className="h-6 w-6 animate-spin text-white" />
+                          </div>
+                        )}
                         {c.mediaType === 'video' ? (
                           <video src={c.mediaUrl} className="w-full h-24 object-cover" muted />
                         ) : (
@@ -720,10 +736,16 @@ ${data.errors.join('\n')}` : message)
               <Textarea
                 placeholder="Tulis caption postinganmu... atau terisi otomatis dari hasil generate AI."
                 value={caption}
-                onChange={e => setCaption(e.target.value)}
+                onChange={e => { setCaption(e.target.value); setCaptionError(null) }}
                 rows={4}
                 className="resize-none text-sm"
               />
+              {captionError && (
+                <div className="flex items-center gap-2 text-xs text-destructive">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  {captionError}
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
