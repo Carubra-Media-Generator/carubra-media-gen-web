@@ -179,7 +179,7 @@ export default function ContentStrategyPage() {
     }
   }
 
-  useEffect(() => { fetchHistory(true) }, [])
+  useEffect(() => { fetchHistory(false) }, [])
 
   // ─── Submit ───────────────────────────────────────────────────────────────
   const handleGenerate = async () => {
@@ -832,7 +832,7 @@ export default function ContentStrategyPage() {
                             {i + 1}
                           </span>
                           <span className="text-sm">{step}</span>
-                          {i < selectedHistoryJob.result.content_flow.length - 1 && (
+                          {selectedHistoryJob.result && i < selectedHistoryJob.result.content_flow.length - 1 && (
                             <span className="text-muted-foreground text-xs ml-1">→</span>
                           )}
                         </div>

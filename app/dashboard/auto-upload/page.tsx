@@ -67,7 +67,7 @@ type ScheduledPost = {
   date: string
   time: string
   platforms: SocmedId[]
-  status: "scheduled" | "posted" | "failed" | "draft"
+  status: "scheduled" | "posted" | "failed" | "partial" | "draft"
   createdAt: string
 }
 
@@ -107,7 +107,7 @@ const PLATFORM_META: PlatformMeta[] = [
     connectHint: "Mulai koneksi Instagram Business atau Creator melalui OAuth. Pastikan akun sudah terhubung ke Facebook Page.",
     usernameLabel: "Username Instagram",
     usernamePlaceholder: "@namakamu",
-    postTypes: ["story", "feed", "reels"],
+    postTypes: ["feed", "reels", "story"],
   },
   {
     id: "facebook", name: "Facebook", color: "#1877F2", Icon: Users,
@@ -148,6 +148,7 @@ const PLATFORM_META: PlatformMeta[] = [
     usernameLabel: "Username Threads",
     usernamePlaceholder: "@namakamu",
     postTypes: ["post"],
+    uiOnly: true,
   },
 ]
 
@@ -157,6 +158,7 @@ const STATUS_META = {
   scheduled: { label: "Terjadwal",  cls: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",   Icon: AlarmClock   },
   posted:  { label: "Selesai",   cls: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400", Icon: CheckCircle2 },
   failed:     { label: "Gagal",     cls: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",         Icon: XCircle      },
+  partial:    { label: "Sebagian",  cls: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400", Icon: AlertCircle  },
   draft:      { label: "Draft",     cls: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",        Icon: Save         },
 } as const
 

@@ -53,19 +53,25 @@ function getFallbackJobs(userId: string): Map<string, StrategyJob> {
 	return fallbackStore.get(userId)!
 }
 
-async function persistJob(job: StrategyJob, userId: string) {
+async function persistJob(job: StrategyJob, userId: string, targetAudience?: string, contentType?: string) {
 	try {
-		await insert('content_analysis', {
+		console.log('[content-analysis] persisting job:', { jobId: job.id, userId, targetAudience, contentType, status: job.status })
+		const { upsert } = await import('@/lib/supabase')
+		await upsert('content_analysis', {
 			id: job.id,
 			user_id: userId,
 			prompt: job.prompt,
 			platform: job.platform,
+			target_audience: targetAudience,
+			content_type: contentType,
 			status: job.status,
 			analysis_result: job.result,
 			created_at: job.created_at,
-		})
+			updated_at: new Date().toISOString(),
+		}, { onConflict: 'id' })
+		console.log('[content-analysis] successfully persisted job:', job.id)
 	} catch (e: any) {
-		console.warn('[content-analysis] failed to persist:', e.message)
+		console.error('[content-analysis] failed to persist:', e.message, e)
 		// Table may not exist yet — use in-memory fallback
 		getFallbackJobs(userId).set(job.id, job)
 	}
@@ -73,13 +79,19 @@ async function persistJob(job: StrategyJob, userId: string) {
 
 async function updatePersistedJob(jobId: string, userId: string, updates: Partial<StrategyJob>) {
 	try {
-		const { updateOne } = await import('@/lib/supabase')
+		const { upsert } = await import('@/lib/supabase')
 		const dbUpdates: any = { updated_at: new Date().toISOString() }
 		if (updates.status) dbUpdates.status = updates.status
 		if (updates.result !== undefined) dbUpdates.analysis_result = updates.result
-		await updateOne('content_analysis', { id: jobId, user_id: userId }, dbUpdates)
+		// Use upsert to avoid UUID type issues
+		await upsert('content_analysis', {
+			id: jobId,
+			user_id: userId,
+			...dbUpdates,
+		}, { onConflict: 'id' })
+		console.log('[content-analysis] successfully updated job:', jobId)
 	} catch (e: any) {
-		console.warn('[content-analysis] failed to update:', e.message)
+		console.error('[content-analysis] failed to update:', e.message, e)
 		const existing = getFallbackJobs(userId).get(jobId)
 		if (existing) getFallbackJobs(userId).set(jobId, { ...existing, ...updates })
 	}
@@ -87,8 +99,9 @@ async function updatePersistedJob(jobId: string, userId: string, updates: Partia
 
 async function loadJobs(userId: string): Promise<StrategyJob[]> {
 	try {
+		console.log('[content-analysis] loading jobs for userId:', userId)
 		const rows = await find('content_analysis', { user_id: userId }, { orderBy: 'created_at', ascending: false })
-		console.log('[DEBUG content_analysis rows]', rows?.length)
+		console.log('[DEBUG content_analysis rows]', rows?.length, rows)
 		return (rows || []).map((r: any) => {
 			let parsedResult = r.analysis_result
 			if (typeof parsedResult === 'string') {
@@ -99,14 +112,14 @@ async function loadJobs(userId: string): Promise<StrategyJob[]> {
 				id: r.id,
 				prompt: r.prompt,
 				platform: r.platform,
-				target_audience: 'Umum',
+				target_audience: r.target_audience ?? 'Umum',
 				status: r.status,
 				created_at: r.created_at,
 				result: parsedResult ?? null,
 			}
 		})
 	} catch (e: any) {
-		console.warn('[content-analysis] failed to load:', e.message)
+		console.error('[content-analysis] failed to load:', e.message, e)
 		// Fallback to in-memory
 		return Array.from(getFallbackJobs(userId).values()).sort(
 			(a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
@@ -395,7 +408,7 @@ export async function POST(req: NextRequest) {
 		}
 
 		// Persist immediately as 'processing'
-		await persistJob(job, user.id)
+		await persistJob(job, user.id, target_audience, content_type)
 
 		const userMessage = buildUserPrompt({
 			prompt,
@@ -452,8 +465,8 @@ export async function POST(req: NextRequest) {
 		job.status = 'completed'
 		job.result = result
 
-		// Update persisted job with result
-		await updatePersistedJob(jobId, user.id, { status: 'completed', result })
+		// Update persisted job with result using upsert
+		await persistJob(job, user.id, target_audience, content_type)
 
 		return NextResponse.json({ job }, { status: 201 })
 	} catch (err: any) {

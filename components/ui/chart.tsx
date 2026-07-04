@@ -106,6 +106,7 @@ const ChartTooltip = RechartsPrimitive.Tooltip
 
 function ChartTooltipContent({
   active,
+  // @ts-expect-error - recharts type mismatch
   payload,
   className,
   indicator = 'dot',

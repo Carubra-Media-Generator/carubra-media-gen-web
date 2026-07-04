@@ -1,4 +1,5 @@
 import { getSupabaseAdmin, updateOne } from './supabase'
+import { TEST_MODE, createTestPayload, logTestPublish } from './test-mode'
 
 function isDataUrl(value: string) {
   return typeof value === 'string' && value.startsWith('data:')
@@ -53,9 +54,218 @@ async function fetchMediaPayload(post: any) {
   }
 }
 
+// ─── Token Refresh ─────────────────────────────────────────────────────────────
+
+async function checkTokenExpiry(connection: any): Promise<boolean> {
+  if (!connection.token_expiry) return false
+  const expiry = new Date(connection.token_expiry)
+  return expiry <= new Date()
+}
+
+async function refreshFacebookToken(connection: any): Promise<string> {
+  const clientId = process.env.FACEBOOK_APP_ID || process.env.FB_APP_ID
+  const clientSecret = process.env.FACEBOOK_APP_SECRET || process.env.FB_APP_SECRET
+  if (!clientId || !clientSecret) throw new Error('Facebook App credentials not configured for token refresh.')
+
+  const resp = await fetch(
+    `https://graph.facebook.com/v18.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${clientId}&client_secret=${clientSecret}&fb_exchange_token=${connection.access_token}`,
+  )
+  const data = await resp.json()
+  if (!resp.ok || data.error) throw new Error(data.error?.message || 'Failed to refresh Facebook token.')
+
+  const newToken = data.access_token || connection.access_token
+  const expiresIn = data.expires_in
+  try {
+    await updateOne('social_connects', { id: connection.id }, {
+      access_token: newToken,
+      token_expiry: expiresIn ? new Date(Date.now() + expiresIn * 1000).toISOString() : null,
+      updated_at: new Date().toISOString(),
+    })
+  } catch (e) {
+    console.warn('[refreshFacebookToken] Failed to persist token:', e)
+  }
+  return newToken
+}
+
+async function getValidFacebookToken(connection: any): Promise<string> {
+  if (!(await checkTokenExpiry(connection))) return connection.access_token
+  return refreshFacebookToken(connection)
+}
+
+async function getValidInstagramToken(connection: any): Promise<string> {
+  return getValidFacebookToken(connection)
+}
+
+async function refreshGoogleToken(connection: any): Promise<string> {
+  const refreshToken = connection.refresh_token
+  if (!refreshToken) throw new Error('Google refresh_token is missing. Please reconnect your YouTube account.')
+
+  const clientId = process.env.GOOGLE_CLIENT_ID
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET
+  if (!clientId || !clientSecret) throw new Error('GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET not configured.')
+
+  const resp = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+      grant_type: 'refresh_token',
+    }),
+  })
+  const data = await resp.json()
+  if (!resp.ok || data.error) throw new Error(data.error_description || data.error || 'Failed to refresh Google token.')
+
+  try {
+    await updateOne('social_connects', { id: connection.id }, {
+      access_token: data.access_token,
+      refresh_token: data.refresh_token || refreshToken,
+      updated_at: new Date().toISOString(),
+    })
+  } catch (e) {
+    console.warn('[refreshGoogleToken] Failed to persist token:', e)
+  }
+  return data.access_token
+}
+
+async function getValidGoogleToken(connection: any): Promise<string> {
+  const testResp = await fetch('https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=' + connection.access_token)
+  if (testResp.ok) return connection.access_token
+  return refreshGoogleToken(connection)
+}
+
+async function refreshTikTokToken(connection: any): Promise<string> {
+  const refreshToken = connection.refresh_token
+  if (!refreshToken) throw new Error('TikTok refresh_token is missing. Please reconnect your TikTok account.')
+
+  const clientKey = process.env.TIKTOK_CLIENT_KEY || process.env.TIKTOK_CLIENT_ID
+  const clientSecret = process.env.TIKTOK_CLIENT_SECRET
+  if (!clientKey || !clientSecret) throw new Error('TikTok credentials not configured for token refresh.')
+
+  const resp = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_key: clientKey,
+      client_secret: clientSecret,
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+    }),
+  })
+  const data = await resp.json()
+  if (!resp.ok || data.error) throw new Error(data.error_description || data.error || 'Failed to refresh TikTok token.')
+
+  const newAccess = data.access_token || data.data?.access_token
+  const newRefresh = data.refresh_token || data.data?.refresh_token
+  const expiresIn = data.expires_in || data.data?.expires_in
+
+  try {
+    await updateOne('social_connects', { id: connection.id }, {
+      access_token: newAccess || connection.access_token,
+      refresh_token: newRefresh || refreshToken,
+      token_expiry: expiresIn ? new Date(Date.now() + expiresIn * 1000).toISOString() : null,
+      updated_at: new Date().toISOString(),
+    })
+  } catch (e) {
+    console.warn('[refreshTikTokToken] Failed to persist token:', e)
+  }
+  return newAccess || connection.access_token
+}
+
+async function getValidTikTokToken(connection: any): Promise<string> {
+  if (!(await checkTokenExpiry(connection))) return connection.access_token
+  return refreshTikTokToken(connection)
+}
+
+async function refreshTwitterToken(connection: any): Promise<string> {
+  const refreshToken = connection.refresh_token
+  if (!refreshToken) throw new Error('Twitter refresh_token is missing. Please reconnect your Twitter account.')
+
+  const clientId = process.env.TWITTER_CLIENT_ID || process.env.X_CLIENT_ID
+  const clientSecret = process.env.TWITTER_CLIENT_SECRET || process.env.X_CLIENT_SECRET
+  if (!clientId || !clientSecret) throw new Error('Twitter credentials not configured for token refresh.')
+
+  const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64')
+  const resp = await fetch('https://api.twitter.com/2/oauth2/token', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Authorization: `Basic ${basicAuth}`,
+    },
+    body: new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+      client_id: clientId,
+    }),
+  })
+  const data = await resp.json()
+  if (!resp.ok || data.error) throw new Error(data.error_description || data.error || 'Failed to refresh Twitter token.')
+
+  try {
+    await updateOne('social_connects', { id: connection.id }, {
+      access_token: data.access_token || connection.access_token,
+      refresh_token: data.refresh_token || refreshToken,
+      updated_at: new Date().toISOString(),
+    })
+  } catch (e) {
+    console.warn('[refreshTwitterToken] Failed to persist token:', e)
+  }
+  return data.access_token || connection.access_token
+}
+
+async function getValidTwitterToken(connection: any): Promise<string> {
+  if (!(await checkTokenExpiry(connection))) return connection.access_token
+  return refreshTwitterToken(connection)
+}
+
+async function getValidThreadsToken(connection: any): Promise<string> {
+  if (!(await checkTokenExpiry(connection))) return connection.access_token
+  const clientId = process.env.THREADS_CLIENT_ID
+  const clientSecret = process.env.THREADS_CLIENT_SECRET
+  if (!clientId || !clientSecret) throw new Error('Threads credentials not configured for token refresh.')
+
+  const resp = await fetch('https://graph.threads.net/oauth/access_token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: 'refresh_token',
+      refresh_token: connection.refresh_token,
+      access_token: connection.access_token,
+    }),
+  })
+  const data = await resp.json()
+  if (!resp.ok || data.error) throw new Error(data.error?.message || 'Failed to refresh Threads token.')
+
+  try {
+    await updateOne('social_connects', { id: connection.id }, {
+      access_token: data.access_token || connection.access_token,
+      refresh_token: data.refresh_token || connection.refresh_token,
+      token_expiry: data.expires_in ? new Date(Date.now() + data.expires_in * 1000).toISOString() : null,
+      updated_at: new Date().toISOString(),
+    })
+  } catch (e) {
+    console.warn('[getValidThreadsToken] Failed to persist token:', e)
+  }
+  return data.access_token || connection.access_token
+}
+
+// ─── Test Mode Guard ───────────────────────────────────────────────────────────
+
+async function testGuard(platform: string, apiUrl: string, method: string, body: any, connection: any, post?: any): Promise<boolean> {
+  if (!TEST_MODE) return false
+  const payload = createTestPayload(platform, apiUrl, method, body, connection, post)
+  logTestPublish(payload)
+  return true
+}
+
+// ─── Publishers ────────────────────────────────────────────────────────────────
+
 async function publishFacebook(post: any, connection: any) {
+  const accessToken = await getValidFacebookToken(connection)
   const pageId = connection.account_id
-  const accessToken = connection.access_token
   if (!pageId || !accessToken) throw new Error('Facebook page ID or access token missing.')
 
   if (post.media_type === 'image' && post.media_url) {
@@ -65,18 +275,16 @@ async function publishFacebook(post: any, connection: any) {
       const form = new FormData()
       form.append('access_token', accessToken)
       form.append('caption', post.caption || '')
-      form.append('source', new Blob([payload.buffer], { type: payload.mimeType }), payload.filename)
+      form.append('source', new Blob([payload!.buffer], { type: payload!.mimeType }), payload!.filename)
+      if (await testGuard('facebook', url, 'POST', form, connection, post)) return
       const resp = await fetch(url, { method: 'POST', body: form })
       const data = await resp.json()
       if (!resp.ok || data.error) throw new Error(data.error?.message || 'Failed to publish Facebook image')
       return
     }
 
-    const body = new URLSearchParams({
-      access_token: accessToken,
-      caption: post.caption || '',
-      url: post.media_url,
-    })
+    const body = new URLSearchParams({ access_token: accessToken, caption: post.caption || '', url: post.media_url })
+    if (await testGuard('facebook', url, 'POST', body, connection, post)) return
     const resp = await fetch(url, { method: 'POST', body })
     const data = await resp.json()
     if (!resp.ok || data.error) throw new Error(data.error?.message || 'Failed to publish Facebook image')
@@ -90,18 +298,16 @@ async function publishFacebook(post: any, connection: any) {
       const form = new FormData()
       form.append('access_token', accessToken)
       form.append('description', post.caption || '')
-      form.append('source', new Blob([payload.buffer], { type: payload.mimeType }), payload.filename)
+      form.append('source', new Blob([payload!.buffer], { type: payload!.mimeType }), payload!.filename)
+      if (await testGuard('facebook', url, 'POST', form, connection, post)) return
       const resp = await fetch(url, { method: 'POST', body: form })
       const data = await resp.json()
       if (!resp.ok || data.error) throw new Error(data.error?.message || 'Failed to publish Facebook video')
       return
     }
 
-    const body = new URLSearchParams({
-      access_token: accessToken,
-      description: post.caption || '',
-      file_url: post.media_url,
-    })
+    const body = new URLSearchParams({ access_token: accessToken, description: post.caption || '', file_url: post.media_url })
+    if (await testGuard('facebook', url, 'POST', body, connection, post)) return
     const resp = await fetch(url, { method: 'POST', body })
     const data = await resp.json()
     if (!resp.ok || data.error) throw new Error(data.error?.message || 'Failed to publish Facebook video')
@@ -109,18 +315,16 @@ async function publishFacebook(post: any, connection: any) {
   }
 
   const url = `https://graph.facebook.com/v18.0/${pageId}/feed`
-  const body = new URLSearchParams({
-    access_token: accessToken,
-    message: post.caption || ' ',
-  })
+  const body = new URLSearchParams({ access_token: accessToken, message: post.caption || ' ' })
+  if (await testGuard('facebook', url, 'POST', body, connection, post)) return
   const resp = await fetch(url, { method: 'POST', body })
   const data = await resp.json()
   if (!resp.ok || data.error) throw new Error(data.error?.message || 'Failed to publish Facebook post')
 }
 
 async function publishInstagram(post: any, connection: any) {
+  const accessToken = await getValidInstagramToken(connection)
   const accountId = connection.account_id
-  const accessToken = connection.access_token
   if (!accountId || !accessToken) throw new Error('Instagram account ID or access token missing.')
   if (!post.media_url) throw new Error('Instagram posting requires an image or video URL.')
   if (isDataUrl(post.media_url)) {
@@ -130,19 +334,23 @@ async function publishInstagram(post: any, connection: any) {
     throw new Error('Instagram publishing currently supports only image or video posts.')
   }
 
+  const igPostType = post.post_types?.instagram || 'feed'
+
   const containerUrl = `https://graph.facebook.com/v18.0/${accountId}/media`
-  const params = new URLSearchParams({
-    access_token: accessToken,
-    caption: post.caption || '',
-  })
+  const params = new URLSearchParams({ access_token: accessToken, caption: post.caption || '' })
 
   if (post.media_type === 'image') {
     params.append('image_url', post.media_url)
   } else {
-    params.append('media_type', 'REELS')
+    if (igPostType === 'reels') {
+      params.append('media_type', 'REELS')
+    } else if (igPostType === 'story') {
+      params.append('media_type', 'STORIES')
+    }
     params.append('video_url', post.media_url)
   }
 
+  if (await testGuard('instagram', containerUrl, 'POST', params, connection, post)) return
   const containerResp = await fetch(containerUrl, { method: 'POST', body: params })
   const containerData = await containerResp.json()
   if (!containerResp.ok || containerData.error) {
@@ -153,10 +361,9 @@ async function publishInstagram(post: any, connection: any) {
   if (!creationId) throw new Error('Instagram media container creation failed')
 
   const publishUrl = `https://graph.facebook.com/v18.0/${accountId}/media_publish`
-  const publishResp = await fetch(publishUrl, {
-    method: 'POST',
-    body: new URLSearchParams({ access_token: accessToken, creation_id: creationId }),
-  })
+  const publishBody = new URLSearchParams({ access_token: accessToken, creation_id: creationId })
+  if (await testGuard('instagram', publishUrl, 'POST', publishBody, connection, post)) return
+  const publishResp = await fetch(publishUrl, { method: 'POST', body: publishBody })
   const publishData = await publishResp.json()
   if (!publishResp.ok || publishData.error) {
     throw new Error(publishData.error?.message || 'Failed to publish Instagram media')
@@ -199,61 +406,9 @@ async function publishWhatsApp(post: any, connection: any) {
     user_id: post.user_id,
   }
 
+  if (await testGuard('whatsapp', process.env.GOWA_WEBHOOK_URL || '', 'POST', payload, connection, post)) return
   await triggerGowaWebhook(payload)
 }
-
-// ─── Google OAuth Token Refresh ─────────────────────────────────────────────
-
-async function refreshGoogleToken(connection: any): Promise<string> {
-  const refreshToken = connection.refresh_token
-  if (!refreshToken) throw new Error('Google refresh_token is missing. Please reconnect your YouTube account.')
-
-  const clientId = process.env.GOOGLE_CLIENT_ID
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET
-  if (!clientId || !clientSecret) throw new Error('GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET not configured.')
-
-  const resp = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      refresh_token: refreshToken,
-      grant_type: 'refresh_token',
-    }),
-  })
-
-  const data = await resp.json()
-  if (!resp.ok || data.error) {
-    throw new Error(data.error_description || data.error || 'Failed to refresh Google access token.')
-  }
-
-  const newAccessToken = data.access_token
-
-  // Persist the new access token
-  try {
-    await updateOne('social_connects', { id: connection.id }, {
-      access_token: newAccessToken,
-      updated_at: new Date().toISOString(),
-    })
-  } catch (e) {
-    console.warn('[refreshGoogleToken] Failed to persist new access token:', e)
-  }
-
-  return newAccessToken
-}
-
-async function getValidGoogleToken(connection: any): Promise<string> {
-  // Try the existing token first
-  const testResp = await fetch('https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=' + connection.access_token)
-  if (testResp.ok) return connection.access_token
-
-  // Token expired, refresh it
-  console.log('[getValidGoogleToken] Access token expired, refreshing...')
-  return refreshGoogleToken(connection)
-}
-
-// ─── YouTube Publisher ──────────────────────────────────────────────────────
 
 async function publishYouTube(post: any, connection: any) {
   const accessToken = await getValidGoogleToken(connection)
@@ -262,14 +417,12 @@ async function publishYouTube(post: any, connection: any) {
     throw new Error('YouTube publishing requires a video file.')
   }
 
-  // Get the video buffer
   const payload = await fetchMediaPayload(post)
   if (!payload) throw new Error('No media found for YouTube upload.')
 
   const title = (post.caption || 'Untitled Video').slice(0, 100)
   const description = post.caption || ''
 
-  // Determine post type for shorts vs regular video
   const postTypes = post.post_types || {}
   const youtubePostType = postTypes.youtube || 'video'
 
@@ -277,7 +430,7 @@ async function publishYouTube(post: any, connection: any) {
     snippet: {
       title,
       description,
-      categoryId: '22', // People & Blogs
+      categoryId: '22',
     },
     status: {
       privacyStatus: 'public',
@@ -285,25 +438,23 @@ async function publishYouTube(post: any, connection: any) {
     },
   }
 
-  // For Shorts, add #Shorts to title if not already present
   if (youtubePostType === 'shorts' && !title.toLowerCase().includes('#shorts')) {
     metadata.snippet.title = `${title} #Shorts`.slice(0, 100)
   }
 
-  // Step 1: Initiate resumable upload
-  const initResp = await fetch(
-    'https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status',
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json; charset=UTF-8',
-        'X-Upload-Content-Length': String(payload.buffer.length),
-        'X-Upload-Content-Type': payload.mimeType,
-      },
-      body: JSON.stringify(metadata),
-    }
-  )
+  const initUrl = 'https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status'
+  if (await testGuard('youtube', initUrl, 'POST', metadata, connection, post)) return
+
+  const initResp = await fetch(initUrl, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json; charset=UTF-8',
+      'X-Upload-Content-Length': String(payload.buffer.length),
+      'X-Upload-Content-Type': payload.mimeType,
+    },
+    body: JSON.stringify(metadata),
+  })
 
   if (!initResp.ok) {
     const errData = await initResp.json().catch(() => null)
@@ -313,7 +464,7 @@ async function publishYouTube(post: any, connection: any) {
   const uploadUrl = initResp.headers.get('location')
   if (!uploadUrl) throw new Error('YouTube did not return an upload URL.')
 
-  // Step 2: Upload video data to the resumable URL
+  if (await testGuard('youtube', uploadUrl, 'PUT', payload.buffer, connection, post)) return
   const uploadResp = await fetch(uploadUrl, {
     method: 'PUT',
     headers: {
@@ -332,10 +483,8 @@ async function publishYouTube(post: any, connection: any) {
   console.log('[publishYouTube] Video uploaded successfully. Video ID:', videoData.id)
 }
 
-// ─── TikTok Publisher ───────────────────────────────────────────────────────
-
 async function publishTikTok(post: any, connection: any) {
-  const accessToken = connection.access_token
+  const accessToken = await getValidTikTokToken(connection)
   if (!accessToken) throw new Error('TikTok access token is missing.')
 
   if (post.media_type !== 'video') {
@@ -347,41 +496,43 @@ async function publishTikTok(post: any, connection: any) {
 
   const caption = (post.caption || '').slice(0, 2200)
 
-  // Step 1: Initialize direct post upload
-  const initResp = await fetch('https://open.tiktokapis.com/v2/post/publish/video/init/', {
+  const initUrl = 'https://open.tiktokapis.com/v2/post/publish/video/init/'
+  const initBody = {
+    post_info: {
+      title: caption,
+      privacy_level: 'PUBLIC_TO_EVERYONE',
+      disable_duet: false,
+      disable_comment: false,
+      disable_stitch: false,
+    },
+    source_info: {
+      source: 'FILE_UPLOAD',
+      video_size: payload.buffer.length,
+      chunk_size: payload.buffer.length,
+      total_chunk_count: 1,
+    },
+  }
+
+  if (await testGuard('tiktok', initUrl, 'POST', initBody, connection, post)) return
+
+  const initResp = await fetch(initUrl, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json; charset=UTF-8',
     },
-    body: JSON.stringify({
-      post_info: {
-        title: caption,
-        privacy_level: 'PUBLIC_TO_EVERYONE',
-        disable_duet: false,
-        disable_comment: false,
-        disable_stitch: false,
-      },
-      source_info: {
-        source: 'FILE_UPLOAD',
-        video_size: payload.buffer.length,
-        chunk_size: payload.buffer.length,
-        total_chunk_count: 1,
-      },
-    }),
+    body: JSON.stringify(initBody),
   })
 
   const initData = await initResp.json()
   if (!initResp.ok || initData.error?.code) {
-    throw new Error(
-      initData.error?.message || initData.error?.log_id || `TikTok upload init failed: ${initResp.status}`
-    )
+    throw new Error(initData.error?.message || initData.error?.log_id || `TikTok upload init failed: ${initResp.status}`)
   }
 
   const uploadUrl = initData.data?.upload_url
   if (!uploadUrl) throw new Error('TikTok did not return an upload URL.')
 
-  // Step 2: Upload video chunk
+  if (await testGuard('tiktok', uploadUrl, 'PUT', payload.buffer, connection, post)) return
   const uploadResp = await fetch(uploadUrl, {
     method: 'PUT',
     headers: {
@@ -400,19 +551,25 @@ async function publishTikTok(post: any, connection: any) {
   console.log('[publishTikTok] Video uploaded successfully. Publish ID:', initData.data?.publish_id)
 }
 
-// ─── Twitter/X Publisher ────────────────────────────────────────────────────
-
 async function uploadTwitterMedia(buffer: Buffer, mimeType: string, accessToken: string): Promise<string> {
   const totalBytes = buffer.length
   const mediaCategory = mimeType.startsWith('video') ? 'tweet_video' : 'tweet_image'
 
-  // INIT
   const initParams = new URLSearchParams({
     command: 'INIT',
     total_bytes: String(totalBytes),
     media_type: mimeType,
     media_category: mediaCategory,
   })
+
+  const safeJson = async (resp: Response) => {
+    const text = await resp.text()
+    try {
+      return text ? JSON.parse(text) : {}
+    } catch {
+      return { error: { message: text || `HTTP ${resp.status}` } }
+    }
+  }
 
   const initResp = await fetch('https://upload.twitter.com/1.1/media/upload.json', {
     method: 'POST',
@@ -424,24 +581,13 @@ async function uploadTwitterMedia(buffer: Buffer, mimeType: string, accessToken:
     body: initParams,
   })
 
-  // Helper for safe JSON parsing
-  const safeJson = async (resp: Response) => {
-    const text = await resp.text()
-    try {
-      return text ? JSON.parse(text) : {}
-    } catch {
-      return { error: { message: text || `HTTP ${resp.status}` } }
-    }
-  }
-
   const initData = await safeJson(initResp)
   if (!initResp.ok || !initData.media_id_string) {
-    throw new Error(initData.error?.message || initData.error || `Twitter media INIT failed: ${initResp.status} - ${JSON.stringify(initData)}`)
+    throw new Error(initData.error?.message || initData.error || `Twitter media INIT failed: ${initResp.status}`)
   }
 
   const mediaId = initData.media_id_string
 
-  // APPEND — send in chunks of 5MB
   const chunkSize = 5 * 1024 * 1024
   let segmentIndex = 0
   for (let offset = 0; offset < totalBytes; offset += chunkSize) {
@@ -450,7 +596,7 @@ async function uploadTwitterMedia(buffer: Buffer, mimeType: string, accessToken:
     form.append('command', 'APPEND')
     form.append('media_id', mediaId)
     form.append('segment_index', String(segmentIndex))
-    form.append('media_data', new Blob([chunk]).stream() as any)
+    form.append('media_data', new Blob([chunk]))
 
     const appendResp = await fetch('https://upload.twitter.com/1.1/media/upload.json', {
       method: 'POST',
@@ -468,12 +614,7 @@ async function uploadTwitterMedia(buffer: Buffer, mimeType: string, accessToken:
     segmentIndex++
   }
 
-  // FINALIZE
-  const finalizeParams = new URLSearchParams({
-    command: 'FINALIZE',
-    media_id: mediaId,
-  })
-
+  const finalizeParams = new URLSearchParams({ command: 'FINALIZE', media_id: mediaId })
   const finalizeResp = await fetch('https://upload.twitter.com/1.1/media/upload.json', {
     method: 'POST',
     headers: {
@@ -486,10 +627,9 @@ async function uploadTwitterMedia(buffer: Buffer, mimeType: string, accessToken:
 
   const finalizeData = await safeJson(finalizeResp)
   if (!finalizeResp.ok) {
-    throw new Error(finalizeData.error?.message || `Twitter media FINALIZE failed: ${finalizeResp.status} - ${JSON.stringify(finalizeData)}`)
+    throw new Error(finalizeData.error?.message || `Twitter media FINALIZE failed: ${finalizeResp.status}`)
   }
 
-  // Wait for processing if video
   if (finalizeData.processing_info) {
     let processingInfo = finalizeData.processing_info
     while (processingInfo && processingInfo.state !== 'succeeded') {
@@ -506,7 +646,7 @@ async function uploadTwitterMedia(buffer: Buffer, mimeType: string, accessToken:
             Authorization: `Bearer ${accessToken}`,
             'User-Agent': 'CarubraMediaGenerator/1.0',
           },
-        }
+        },
       )
       const statusData = await safeJson(statusResp)
       processingInfo = statusData.processing_info
@@ -517,13 +657,12 @@ async function uploadTwitterMedia(buffer: Buffer, mimeType: string, accessToken:
 }
 
 async function publishTwitter(post: any, connection: any) {
-  const accessToken = connection.access_token
+  const accessToken = await getValidTwitterToken(connection)
   if (!accessToken) throw new Error('Twitter access token is missing.')
 
   const tweetBody: any = {}
   if (post.caption) tweetBody.text = post.caption
 
-  // Upload media if present
   if (post.media_url) {
     const payload = await fetchMediaPayload(post)
     if (payload) {
@@ -532,8 +671,10 @@ async function publishTwitter(post: any, connection: any) {
     }
   }
 
-  // Post tweet
-  const tweetResp = await fetch('https://api.twitter.com/2/tweets', {
+  const tweetUrl = 'https://api.twitter.com/2/tweets'
+  if (await testGuard('twitter', tweetUrl, 'POST', tweetBody, connection, post)) return
+
+  const tweetResp = await fetch(tweetUrl, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -548,11 +689,75 @@ async function publishTwitter(post: any, connection: any) {
   try { tweetData = text ? JSON.parse(text) : {} } catch {}
 
   if (!tweetResp.ok || tweetData.errors) {
-    const msg = tweetData.errors?.[0]?.message || tweetData.detail || `Twitter post failed: ${tweetResp.status} - ${text}`
+    const msg = tweetData.errors?.[0]?.message || tweetData.detail || `Twitter post failed: ${tweetResp.status}`
     throw new Error(msg)
   }
 
   console.log('[publishTwitter] Tweet posted successfully. Tweet ID:', tweetData.data?.id)
+}
+
+async function publishThreads(post: any, connection: any) {
+  const accessToken = await getValidThreadsToken(connection)
+  const userId = connection.account_id
+  if (!userId || !accessToken) throw new Error('Threads user ID or access token missing.')
+
+  if (post.media_type === 'image' || post.media_type === 'video') {
+    if (!post.media_url) throw new Error('Threads publishing requires a media URL.')
+    if (isDataUrl(post.media_url)) {
+      throw new Error('Threads publishing requires a publicly accessible media URL.')
+    }
+
+    const containerUrl = `https://graph.threads.net/v1.0/${userId}/threads`
+    const containerParams = new URLSearchParams({
+      access_token: accessToken,
+      media_type: post.media_type === 'video' ? 'VIDEO' : 'IMAGE',
+      media_url: post.media_url,
+      text: post.caption || '',
+    })
+
+    if (await testGuard('threads', containerUrl, 'POST', containerParams, connection, post)) return
+
+    const containerResp = await fetch(containerUrl, { method: 'POST', body: containerParams })
+    const containerData = await containerResp.json()
+    if (!containerResp.ok || containerData.error) {
+      throw new Error(containerData.error?.message || 'Failed to create Threads media container')
+    }
+
+    const creationId = containerData.id
+    if (!creationId) throw new Error('Threads media container creation failed')
+
+    const publishUrl = `https://graph.threads.net/v1.0/${userId}/threads_publish`
+    const publishBody = new URLSearchParams({ access_token: accessToken, creation_id: creationId })
+    if (await testGuard('threads', publishUrl, 'POST', publishBody, connection, post)) return
+    const publishResp = await fetch(publishUrl, { method: 'POST', body: publishBody })
+    const publishData = await publishResp.json()
+    if (!publishResp.ok || publishData.error) {
+      throw new Error(publishData.error?.message || 'Failed to publish Threads media')
+    }
+    return
+  }
+
+  const postUrl = `https://graph.threads.net/v1.0/${userId}/threads`
+  const postBody = new URLSearchParams({
+    access_token: accessToken,
+    text: post.caption || '',
+    media_type: 'TEXT',
+  })
+  if (await testGuard('threads', postUrl, 'POST', postBody, connection, post)) return
+  const resp = await fetch(postUrl, { method: 'POST', body: postBody })
+  const data = await resp.json()
+  if (!resp.ok || data.error) {
+    throw new Error(data.error?.message || 'Failed to publish Threads text post')
+  }
+
+  const publishUrl2 = `https://graph.threads.net/v1.0/${userId}/threads_publish`
+  const publishBody2 = new URLSearchParams({ access_token: accessToken, creation_id: data.id })
+  if (await testGuard('threads', publishUrl2, 'POST', publishBody2, connection, post)) return
+  const publishResp2 = await fetch(publishUrl2, { method: 'POST', body: publishBody2 })
+  const publishData2 = await publishResp2.json()
+  if (!publishResp2.ok || publishData2.error) {
+    throw new Error(publishData2.error?.message || 'Failed to publish Threads text post')
+  }
 }
 
 async function publishPlatform(post: any, connection: any) {
@@ -570,6 +775,8 @@ async function publishPlatform(post: any, connection: any) {
     case 'twitter':
     case 'x':
       return publishTwitter(post, connection)
+    case 'threads':
+      return publishThreads(post, connection)
     default:
       throw new Error(`Publishing for ${connection.platform} is not supported yet.`)
   }
@@ -578,14 +785,13 @@ async function publishPlatform(post: any, connection: any) {
 export async function publishDueScheduledPosts(userId?: string, limit = 20) {
   const supabase = await getSupabaseAdmin()
   const now = new Date()
-  
-  // Ambil data yang berstatus scheduled. Batas dibesarkan untuk filter di memori.
+
   let query = supabase.from('scheduled_posts').select('*').in('status', ['scheduled', 'failed']).limit(limit * 5)
   if (userId) query = query.eq('user_id', userId)
 
   const { data: allScheduled, error: dueError } = await query
   if (dueError) throw dueError
-  
+
   const duePosts = (allScheduled || []).filter((post: any) => {
     if (!post.scheduled_date || !post.scheduled_time) return false
     const postTime = new Date(`${post.scheduled_date}T${post.scheduled_time}`)
@@ -593,51 +799,68 @@ export async function publishDueScheduledPosts(userId?: string, limit = 20) {
   }).slice(0, limit)
 
   if (duePosts.length === 0) {
-    return { posted: 0, failed: 0, errors: [] }
+    return { posted: 0, failed: 0, partial: 0, errors: [] }
   }
 
   const { data: connections, error: connError } = await supabase
     .from('social_connects')
     .select('*')
     .eq('status', 'active')
-    .in('platform', ['facebook', 'instagram', 'whatsapp', 'youtube', 'tiktok', 'twitter'])
+    .in('platform', ['facebook', 'instagram', 'whatsapp', 'youtube', 'tiktok', 'twitter', 'threads'])
 
   if (connError) throw connError
 
   const errors: string[] = []
   let posted = 0
   let failed = 0
+  let partial = 0
 
   for (const post of duePosts) {
     try {
       const platforms = Array.isArray(post.platforms) ? post.platforms : []
-      if (platforms.length === 0) {
-        throw new Error('No platforms selected for scheduled post.')
-      }
+      if (platforms.length === 0) throw new Error('No platforms selected for scheduled post.')
+
+      const results: { platform: string; success: boolean; error?: string }[] = []
 
       for (const platform of platforms) {
-        const connection = connections.find((conn: any) => conn.platform === platform && conn.user_id === post.user_id)
+        const connection = connections.find(
+          (conn: any) => conn.platform === platform && conn.user_id === post.user_id,
+        )
         if (!connection) {
-          throw new Error(`Platform ${platform} is not connected.`)
+          results.push({ platform, success: false, error: `Platform ${platform} is not connected.` })
+          continue
         }
-        await publishPlatform(post, connection)
+        try {
+          await publishPlatform(post, connection)
+          results.push({ platform, success: true })
+        } catch (err: any) {
+          results.push({ platform, success: false, error: err?.message || String(err) })
+        }
       }
 
-      await updateOne('scheduled_posts', { id: post.id }, { status: 'posted', updated_at: new Date().toISOString() })
-      posted += 1
+      const successCount = results.filter((r) => r.success).length
+      if (successCount === platforms.length) {
+        await updateOne('scheduled_posts', { id: post.id }, { status: 'posted', updated_at: new Date().toISOString() })
+        posted += 1
+      } else if (successCount === 0) {
+        failed += 1
+        errors.push(`Post ${post.id}: All platforms failed. ${results.map((r) => `${r.platform}: ${r.error || 'unknown'}`).join('; ')}`)
+        await updateOne('scheduled_posts', { id: post.id }, { status: 'failed', updated_at: new Date().toISOString() })
+      } else {
+        partial += 1
+        errors.push(`Post ${post.id}: Partial success. ${results.map((r) => `${r.platform}: ${r.success ? 'OK' : r.error}`).join('; ')}`)
+        await updateOne('scheduled_posts', { id: post.id }, { status: 'partial', updated_at: new Date().toISOString() })
+      }
     } catch (error: any) {
       failed += 1
       errors.push(`Post ${post.id}: ${error?.message || String(error)}`)
       try {
-        await updateOne('scheduled_posts', { id: post.id }, {
-          status: 'failed',
-          updated_at: new Date().toISOString(),
-        })
+        await updateOne('scheduled_posts', { id: post.id }, { status: 'failed', updated_at: new Date().toISOString() })
       } catch (updateError) {
-        errors.push(`Unable to update failed status for ${post.id}: ${updateError?.message || String(updateError)}`)
+        errors.push(`Unable to update failed status for ${post.id}: ${updateError}`)
       }
     }
   }
 
-  return { posted, failed, errors }
+  return { posted, failed, partial, errors }
 }

@@ -4,13 +4,14 @@ import { findOne } from '@/lib/supabase'
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { orderId: string } }
+  { params }: { params: Promise<{ orderId: string }> }
 ) {
+  const { orderId: rawOrderId } = await params
   const user = getUserFromRequest(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   try {
-    const { orderId } = params
+    const orderId = rawOrderId
 
     const transaction = await findOne('transactions', { order_id: orderId })
     if (!transaction) {
