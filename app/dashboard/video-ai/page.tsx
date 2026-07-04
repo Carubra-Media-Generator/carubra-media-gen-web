@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils"
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type VideoModel = "text-to-video" | "image-to-video"
-type Resolution = "480p" | "720p"
+type Resolution = "480p" | "720p" | "1080p" | "2K"
 type ConnectedSocmed = "twitter" | "instagram" | "facebook"
 
 type VideoItem = {
@@ -42,14 +42,14 @@ type VideoItem = {
   videoUrl?: string
 }
 
-const resolutionCost: Record<Resolution, number> = { "480p": 2, "720p": 3 }
+const resolutionCost: Record<Resolution, number> = { "480p": 2, "720p": 3, "1080p": 4, "2K": 5 }
 
 const RATIO_OPTIONS = [
-  { value: "16-9", label: "Widescreen", ratio: "16:9", tw: "aspect-video",  w: 16, h: 9  },
-  { value: "9-16", label: "Vertical",   ratio: "9:16", tw: "aspect-[9/16]", w: 9,  h: 16 },
-  { value: "1-1",  label: "Square",     ratio: "1:1",  tw: "aspect-square", w: 1,  h: 1  },
-  { value: "3-2",  label: "Landscape",  ratio: "3:2",  tw: "aspect-[3/2]",  w: 3,  h: 2  },
-  { value: "2-3",  label: "Portrait",   ratio: "2:3",  tw: "aspect-[2/3]",  w: 2,  h: 3  },
+  { value: "1-1",  label: "Square",      ratio: "1:1",  tw: "aspect-square", w: 1,  h: 1  },
+  { value: "9-16", label: "Vertical",    ratio: "9:16", tw: "aspect-[9/16]", w: 9,  h: 16 },
+  { value: "16-9", label: "Widescreen",  ratio: "16:9", tw: "aspect-video",  w: 16, h: 9  },
+  { value: "4-3",  label: "Standard",    ratio: "4:3",  tw: "aspect-[4/3]",  w: 4,  h: 3  },
+  { value: "3-4",  label: "Portrait",    ratio: "3:4",  tw: "aspect-[3/4]",  w: 3,  h: 4  },
 ]
 
 // ─── Detail Modal ─────────────────────────────────────────────────────────────
@@ -318,7 +318,7 @@ function DetailModal({
 
 export default function VideoAIPage() {
   const { t } = useLanguage()
-  const { user } = useAuth()
+  const { user, isBalanceLoaded } = useAuth()
 
   const [model, setModel] = useState<VideoModel>("text-to-video")
   const [title, setTitle] = useState("")
@@ -327,10 +327,15 @@ export default function VideoAIPage() {
   const [ratio, setRatio] = useState("16-9")
   const [duration, setDuration] = useState("30")
   const [sourceImage, setSourceImage] = useState<string | null>(null)
+  const [sourceImageMimeType, setSourceImageMimeType] = useState<string | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
 
-  const [coinBalance, setCoinBalance] = useState(0)
+  // Initialize from user.coins immediately to prevent 0-flash before API resolves
+  const [coinBalance, setCoinBalance] = useState<number>(user?.coins ?? 0)
   const [history, setHistory] = useState<VideoItem[]>([])
+  
+  const [activeResultId, setActiveResultId] = useState<string | null>(null)
+  const activeItem = activeResultId ? history.find(h => h.id === activeResultId) || null : null
 
   const [detailItem, setDetailItem] = useState<VideoItem | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
@@ -341,10 +346,29 @@ export default function VideoAIPage() {
   // Simpan interval refs agar bisa di-clear
   const pollingRefs = useRef<Record<string, ReturnType<typeof setInterval>>>({})
 
+  // Clear temporary state on page unmount
+  useEffect(() => {
+    return () => {
+      setActiveResultId(null)
+      setTitle("")
+      setScript("")
+      setDuration("30")
+      setSourceImage(null)
+      setSourceImageMimeType(null)
+      // Stop all running intervals on unmount
+      Object.values(pollingRefs.current).forEach(clearInterval)
+      pollingRefs.current = {}
+    }
+  }, [])
+
+  // NOTE: Do NOT clear activeResultId when script/title changes.
+  // Doing so would wipe the result preview when the form auto-resets after generation.
+
   const connectedSocmed: ConnectedSocmed[] = ["twitter", "instagram"]
   const coinCost = resolutionCost[resolution]
   const selectedRatio = RATIO_OPTIONS.find(r => r.value === ratio)!
-  const canGenerate = script.trim() && title.trim() && duration && coinBalance >= coinCost && !!user
+  // Only consider balance insufficient AFTER it has been confirmed loaded to avoid flash
+  const canGenerate = script.trim() && title.trim() && duration && (!isBalanceLoaded || coinBalance >= coinCost) && !!user
 
   const reportAiUsage = async (payload: {
     apiName: string
@@ -383,10 +407,18 @@ export default function VideoAIPage() {
     const token = localStorage.getItem("carubra-token")
     if (!token) return
 
-    fetch("/api/users/balance", { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json())
-      .then(data => setCoinBalance(data.coins ?? 0))
-      .catch(() => {})
+    // Sync coin balance whenever auth context updates it (handles API fetch completion)
+    if (typeof user?.coins === 'number') {
+      setCoinBalance(user.coins)
+    } else {
+      const token = localStorage.getItem('carubra-token')
+      if (token) {
+        fetch('/api/users/balance', { headers: { Authorization: `Bearer ${token}` } })
+          .then(r => r.json())
+          .then(data => setCoinBalance(data.coins ?? 0))
+          .catch(() => {})
+      }
+    }
 
     fetch("/api/video-ai", { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
@@ -466,12 +498,14 @@ export default function VideoAIPage() {
           setHistory(prev => prev.map(item =>
             item.id === tempId ? { ...item, status: "completed", completedTime, videoUrl } : item
           ))
+          // Make sure the preview panel shows this completed video
+          setActiveResultId(tempId)
           setIsGenerating(false)
 
           // Generate caption
           await handleGenerateCaption(videoScript, tempId)
 
-          // Reset form
+          // Reset form AFTER updating activeResultId so the preview doesn't vanish
           setTitle(""); setScript(""); setDuration("30")
 
         } else if (data.status === "failed") {
@@ -523,8 +557,36 @@ export default function VideoAIPage() {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    const mimeType = file.type || "image/jpeg"
+    setSourceImageMimeType(mimeType)
     const reader = new FileReader()
-    reader.onload = ev => setSourceImage(ev.target?.result as string)
+    reader.onload = ev => {
+      const result = ev.target?.result as string
+      // Compress image before setting to state to avoid ECONNRESET (Payload Too Large)
+      const img = new Image()
+      img.onload = () => {
+        const canvas = document.createElement("canvas")
+        const MAX_DIM = 1280
+        let width = img.width
+        let height = img.height
+
+        if (width > height && width > MAX_DIM) {
+          height *= MAX_DIM / width
+          width = MAX_DIM
+        } else if (height > MAX_DIM) {
+          width *= MAX_DIM / height
+          height = MAX_DIM
+        }
+
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext("2d")
+        ctx?.drawImage(img, 0, 0, width, height)
+        const compressedBase64 = canvas.toDataURL("image/jpeg", 0.8)
+        setSourceImage(compressedBase64)
+      }
+      img.src = result
+    }
     reader.readAsDataURL(file)
   }
 
@@ -534,6 +596,7 @@ export default function VideoAIPage() {
     setIsGenerating(true)
     const startTime = Date.now()
     const tempId = Date.now().toString()
+    setActiveResultId(tempId)
 
     setHistory(prev => [{
       id: tempId, title, script, resolution, ratio, model,
@@ -546,21 +609,52 @@ export default function VideoAIPage() {
       const token = localStorage.getItem("carubra-token")
       if (!token) throw new Error("Auth required")
 
-      const response = await fetch("/api/video-ai/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ prompt: script, style: ratio, duration: parseInt(duration), resolution }),
-      })
+      const body: Record<string, unknown> = {
+        prompt: script,
+        style: ratio,
+        duration: parseInt(duration),
+        resolution,
+      }
+      if (model === "image-to-video" && sourceImage) {
+        body.init_image = sourceImage.split(",")[1]
+        body.mime_type = sourceImageMimeType || "image/jpeg"
+      }
 
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}))
-        console.error("[video-ai] Generate failed:", errData)
+      let response: Response
+      try {
+        response = await fetch("/api/video-ai/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify(body),
+        })
+      } catch (fetchError: any) {
+        console.error("[video-ai] Network error:", fetchError)
         const completedTime = Math.round((Date.now() - startTime) / 1000)
         setHistory(prev => prev.map(item =>
           item.id === tempId ? { ...item, status: "failed", completedTime } : item
         ))
         setCoinBalance(prev => prev + coinCost)
         setIsGenerating(false)
+        alert(`Network error: ${fetchError.message || 'Could not connect to server'}`)
+        return
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error("[video-ai] Response status:", response.status)
+        console.error("[video-ai] Response text:", errorText)
+        let errData: any = {}
+        try {
+          errData = JSON.parse(errorText)
+        } catch {}
+        console.error("[video-ai] Parsed error data:", errData)
+        const completedTime = Math.round((Date.now() - startTime) / 1000)
+        setHistory(prev => prev.map(item =>
+          item.id === tempId ? { ...item, status: "failed", completedTime } : item
+        ))
+        setCoinBalance(prev => prev + coinCost)
+        setIsGenerating(false)
+        alert(`Video generation failed: ${errData.error || errorText || 'Unknown error'}`)
         return
       }
 
@@ -578,10 +672,12 @@ export default function VideoAIPage() {
         metadata: { style: ratio, duration: parseInt(duration) },
       })
 
-      // Update tempId → real videoId di history
+      // Update tempId → real videoId di history, and keep activeResultId in sync
       setHistory(prev => prev.map(item =>
         item.id === tempId ? { ...item, id: videoId, jobId } : item
       ))
+      // Sync activeResultId to the real DB ID so the preview keeps tracking this item
+      setActiveResultId(videoId)
 
       if (!jobId) {
         throw new Error("No jobId returned")
@@ -602,20 +698,39 @@ export default function VideoAIPage() {
   }
 
   const handleDelete = async (id: string) => {
-    // Hentikan polling kalau masih jalan
+    // Stop polling if still running
     if (pollingRefs.current[id]) {
       clearInterval(pollingRefs.current[id])
       delete pollingRefs.current[id]
     }
-    setHistory(prev => prev.filter(item => item.id !== id))
+
+    // Temp IDs are numeric timestamps (Date.now().toString()); real DB IDs are UUIDs.
+    // Deleting a temp ID silently fails in the API and reappears on next refresh.
+    const isRealId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+    if (!isRealId) {
+      setHistory(prev => prev.filter(item => item.id !== id))
+      return
+    }
+
     try {
       const token = localStorage.getItem("carubra-token")
-      await fetch(`/api/video-ai/${id}`, {
+      const res = await fetch(`/api/video-ai/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       })
-    } catch {}
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        console.error("Failed to delete video:", err)
+        // Still remove from UI to avoid stuck item
+      }
+      setHistory(prev => prev.filter(item => item.id !== id))
+    } catch (error) {
+      console.error("Failed to delete video:", error)
+      // Remove from UI anyway so user isn't stuck
+      setHistory(prev => prev.filter(item => item.id !== id))
+    }
   }
+
 
   const handleSaveEdit = (id: string, newTitle: string, newScript: string, newCaption: string) => {
     setHistory(prev => prev.map(item =>
@@ -780,10 +895,10 @@ export default function VideoAIPage() {
               {/* Resolution */}
               <div className="space-y-2">
                 <Label className="text-sm font-semibold">Resolusi</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(["480p", "720p"] as Resolution[]).map(r => (
+                <div className="grid grid-cols-4 gap-2">
+                  {(["480p", "720p", "1080p", "2K"] as Resolution[]).map(r => (
                     <button key={r} onClick={() => setResolution(r)}
-                      className={cn("rounded-lg border-2 px-3 py-2.5 text-sm font-medium transition-all flex flex-col items-center",
+                      className={cn("rounded-lg border-2 px-1 py-2 text-sm font-medium transition-all flex flex-col items-center",
                         resolution === r ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:border-primary/50"
                       )}>
                       <span>{r}</span>
@@ -826,7 +941,8 @@ export default function VideoAIPage() {
                 </div>
               </div>
 
-              {coinBalance < coinCost && (
+              {/* Only show insufficient balance warning AFTER balance has fully loaded to prevent flash */}
+              {isBalanceLoaded && coinBalance < coinCost && (
                 <div className="rounded-lg bg-destructive/10 border border-destructive/20 px-3 py-2 text-sm text-destructive flex items-center gap-2">
                   <XCircle className="h-4 w-4 flex-shrink-0" />Saldo koin tidak cukup.
                 </div>
@@ -854,21 +970,21 @@ export default function VideoAIPage() {
             <CardContent className="space-y-4">
               <div className={cn("w-full rounded-xl border-2 border-dashed overflow-hidden bg-muted/30 flex items-center justify-center",
                 selectedRatio.tw, "min-h-[200px] max-h-[500px]")}>
-                {isGenerating ? (
+                {activeItem?.status === "generating" ? (
                   <div className="flex flex-col items-center gap-3 text-muted-foreground">
                     <Loader2 className="h-10 w-10 animate-spin text-primary" />
                     <p className="text-sm font-medium">Membuat video...</p>
                     <p className="text-xs opacity-60">Ini mungkin memerlukan beberapa menit</p>
                   </div>
-                ) : history[0]?.status === "completed" && history[0]?.videoUrl ? (
-                  <video src={history[0].videoUrl} controls className="w-full h-full rounded-xl" />
-                ) : history[0]?.status === "failed" ? (
+                ) : activeItem?.status === "completed" && activeItem?.videoUrl ? (
+                  <video src={activeItem.videoUrl} controls className="w-full h-full rounded-xl" />
+                ) : activeItem?.status === "failed" ? (
                   <div className="flex flex-col items-center gap-3 text-muted-foreground p-8 text-center">
                     <XCircle className="h-12 w-12 opacity-40 text-destructive" />
                     <p className="text-sm font-medium text-destructive">Generate video gagal</p>
                     <p className="text-xs opacity-60">Coba lagi dengan prompt berbeda</p>
                   </div>
-                ) : history[0]?.status === "completed" ? (
+                ) : activeItem?.status === "completed" ? (
                   <div className="flex flex-col items-center gap-3 text-muted-foreground p-8 text-center">
                     <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center">
                       <Video className="h-8 w-8 text-primary" />
@@ -884,19 +1000,19 @@ export default function VideoAIPage() {
                 )}
               </div>
 
-              {!isGenerating && history[0]?.status === "completed" && (
+              {activeItem?.status !== "generating" && activeItem?.status === "completed" && (
                 <>
                   <div className="rounded-xl border bg-muted/30 p-4 space-y-2">
-                    <p className="text-sm font-semibold">{history[0].title}</p>
+                    <p className="text-sm font-semibold">{activeItem.title}</p>
                     <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-                      <span>{history[0].resolution}</span><span>·</span>
-                      <span>{history[0].duration}s</span><span>·</span>
-                      <span>{history[0].coinCost} koin</span><span>·</span>
+                      <span>{activeItem.resolution}</span><span>·</span>
+                      <span>{activeItem.duration}s</span><span>·</span>
+                      <span>{activeItem.coinCost} koin</span><span>·</span>
                       <Clock className="h-3 w-3 self-center" />
-                      <span>Selesai dalam {formatTime(history[0].completedTime)}</span>
+                      <span>Selesai dalam {formatTime(activeItem.completedTime)}</span>
                     </div>
-                    {history[0].caption && (
-                      <p className="text-xs italic text-muted-foreground border-t pt-2">"{history[0].caption}"</p>
+                    {activeItem.caption && (
+                      <p className="text-xs italic text-muted-foreground border-t pt-2">"{activeItem.caption}"</p>
                     )}
                   </div>
                   {connectedSocmed.length > 0 && (

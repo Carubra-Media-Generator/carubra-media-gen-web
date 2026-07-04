@@ -4,6 +4,45 @@ import { insert } from '@/lib/supabase'
 import { creditUserCoins, deductUserCoins, ensureUserHasCoins, getImageCoinCost } from '@/lib/coins'
 import { getUserFromRequest } from '@/middleware/auth'
 
+// Valid size presets supported by OpenAI-compatible image APIs
+// Width x Height as supported by most providers
+const VALID_SIZES: { w: number; h: number }[] = [
+  { w: 1024, h: 1024 }, // 1:1 Square
+  { w: 1280, h: 720  }, // 16:9 Widescreen
+  { w: 720,  h: 1280 }, // 9:16 Vertical
+  { w: 1024, h: 768  }, // 4:3 Standard
+  { w: 768,  h: 1024 }, // 3:4 Portrait
+  { w: 1440, h: 1440 }, // 2K Square
+  { w: 1920, h: 1080 }, // 2K Widescreen
+  { w: 1080, h: 1920 }, // 2K Vertical
+  { w: 1152, h: 864  }, // fallback
+  { w: 864,  h: 1152 }, // fallback
+]
+
+/**
+ * Snap requested dimensions to the nearest valid API preset.
+ * Matches by aspect ratio first, then by closest area.
+ */
+function snapToValidSize(width: number, height: number): { width: number; height: number } {
+  const requestedRatio = width / height
+  let bestSize = VALID_SIZES[0]
+  let bestDelta = Infinity
+
+  for (const size of VALID_SIZES) {
+    const sizeRatio = size.w / size.h
+    const ratioDelta = Math.abs(requestedRatio - sizeRatio)
+    // Primary sort: aspect ratio match; secondary: area proximity
+    const areaDelta = Math.abs(width * height - size.w * size.h) / (size.w * size.h)
+    const combinedDelta = ratioDelta * 10 + areaDelta
+    if (combinedDelta < bestDelta) {
+      bestDelta = combinedDelta
+      bestSize = size
+    }
+  }
+
+  return { width: bestSize.w, height: bestSize.h }
+}
+
 export async function POST(req: NextRequest) {
   const user = getUserFromRequest(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -11,8 +50,8 @@ export async function POST(req: NextRequest) {
   try {
     const {
       prompt,
-      width = 1024,
-      height = 1024,
+      width: rawWidth = 1024,
+      height: rawHeight = 1024,
       steps = 4,
       cfg_scale = 1,
       init_image,
@@ -23,8 +62,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Prompt is required' }, { status: 400 })
     }
 
-    if (typeof width !== 'number' || typeof height !== 'number') {
+    if (typeof rawWidth !== 'number' || typeof rawHeight !== 'number') {
       return NextResponse.json({ error: 'Width and height must be numbers' }, { status: 400 })
+    }
+
+    // Snap to nearest valid preset to prevent API dimension errors
+    const { width, height } = snapToValidSize(rawWidth, rawHeight)
+    if (width !== rawWidth || height !== rawHeight) {
+      console.log(`[image-ai] Snapped dimensions from ${rawWidth}x${rawHeight} → ${width}x${height}`)
     }
 
     const coinsUsed = getImageCoinCost(width, height)
@@ -59,38 +104,74 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      const payload: Record<string, unknown> = {
-        model: IMAGE_MODEL,
-        prompt,
-        width,
-        height,
-        steps,
-        cfg_scale,
-        size: `${width}x${height}`,
-        n: 1,
-      }
-
-      if (init_image) payload.init_image = init_image
-      if (strength) payload.strength = strength
-
-      console.log(`[image-ai] Calling ${IMAGE_API_URL}/v1/images/generations`)
+      const isImg2Img = !!init_image
+      console.log(`[image-ai] Mode: ${isImg2Img ? 'image-to-image' : 'text-to-image'}`)
       console.log(`[image-ai] Model: ${IMAGE_MODEL}, Prompt: ${prompt}`)
-      console.log('[image-ai] Payload:', payload)
+      console.log(`[image-ai] Output dimensions: ${width}x${height}`)
 
       const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 60000) // 60s: image gen can be slow
+      const timeoutMs = isImg2Img ? 180000 : 90000
+      const timeout = setTimeout(() => controller.abort(), timeoutMs)
 
       let response: Response
       try {
-        response = await fetch(`${IMAGE_API_URL}/v1/images/generations`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${IMAGE_API_KEY}`,
-          },
-          body: JSON.stringify(payload),
-          signal: controller.signal,
-        })
+        if (isImg2Img) {
+          // ─── Image-to-Image: MUST use /v1/images/edits with multipart/form-data ───
+          // The /v1/images/generations endpoint does NOT support image conditioning.
+          // Sending init_image as JSON is silently ignored by all major providers.
+          console.log(`[image-ai] Using /v1/images/edits endpoint (multipart/form-data)`)
+          console.log(`[image-ai] init_image base64 length: ${init_image.length}`)
+
+          // Convert base64 to Buffer → Blob
+          const imageBuffer = Buffer.from(init_image, 'base64')
+          const imageBlob = new Blob([imageBuffer], { type: 'image/png' })
+
+          const form = new FormData()
+          form.append('image', imageBlob, 'source.png')
+          form.append('prompt', prompt)
+          form.append('model', IMAGE_MODEL)
+          form.append('n', '1')
+          form.append('size', `${width}x${height}`)
+          // strength / cfg: some providers accept these, harmless if ignored
+          const appliedStrength = typeof strength === 'number' ? strength : 0.65
+          form.append('strength', String(appliedStrength))
+
+          console.log(`[image-ai] Strength: ${appliedStrength}`)
+
+          response = await fetch(`${IMAGE_API_URL}/v1/images/edits`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${IMAGE_API_KEY}`,
+              // Do NOT set Content-Type manually — fetch sets it with boundary automatically
+            },
+            body: form,
+            signal: controller.signal,
+          })
+        } else {
+          // ─── Text-to-Image: use /v1/images/generations with JSON ──────────────
+          console.log(`[image-ai] Using /v1/images/generations endpoint (JSON)`)
+
+          const payload: Record<string, unknown> = {
+            model: IMAGE_MODEL,
+            prompt,
+            width,
+            height,
+            steps,
+            cfg_scale,
+            size: `${width}x${height}`,
+            n: 1,
+          }
+
+          response = await fetch(`${IMAGE_API_URL}/v1/images/generations`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${IMAGE_API_KEY}`,
+            },
+            body: JSON.stringify(payload),
+            signal: controller.signal,
+          })
+        }
       } finally {
         clearTimeout(timeout)
       }
@@ -108,6 +189,83 @@ export async function POST(req: NextRequest) {
       console.log('[image-ai] Provider response body:', carubraData)
 
       if (!response.ok) {
+        // If /v1/images/edits is unsupported (404/405), fall back to /v1/images/generations
+        // with init_image in the JSON body (legacy behavior)
+        if (isImg2Img && (response.status === 404 || response.status === 405)) {
+          console.warn(`[image-ai] /v1/images/edits not supported (${response.status}), falling back to /v1/images/generations with init_image field`)
+
+          const fallbackPayload: Record<string, unknown> = {
+            model: IMAGE_MODEL,
+            prompt,
+            width,
+            height,
+            steps,
+            cfg_scale,
+            size: `${width}x${height}`,
+            n: 1,
+            init_image,
+            strength: typeof strength === 'number' ? strength : 0.65,
+          }
+
+          const fallbackController = new AbortController()
+          const fallbackTimeout = setTimeout(() => fallbackController.abort(), 180000)
+          let fallbackResponse: Response
+          try {
+            fallbackResponse = await fetch(`${IMAGE_API_URL}/v1/images/generations`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${IMAGE_API_KEY}`,
+              },
+              body: JSON.stringify(fallbackPayload),
+              signal: fallbackController.signal,
+            })
+          } finally {
+            clearTimeout(fallbackTimeout)
+          }
+
+          const fallbackText = await fallbackResponse.text()
+          console.log(`[image-ai] Fallback response status: ${fallbackResponse.status}`)
+          let fallbackData: any
+          try { fallbackData = JSON.parse(fallbackText) } catch { fallbackData = fallbackText }
+          console.log('[image-ai] Fallback response body:', fallbackData)
+
+          if (!fallbackResponse.ok) {
+            newImage.status = 'failed'
+            await insert('images', newImage)
+            return NextResponse.json({ error: 'Image generation failed', detail: fallbackData }, { status: fallbackResponse.status })
+          }
+
+          // Use fallback response data
+          const fallbackItem = fallbackData?.data?.[0]
+          const fallbackUrl: string | null =
+            fallbackItem?.url ||
+            (fallbackItem?.b64_json ? `data:image/png;base64,${fallbackItem.b64_json}` : null) ||
+            (fallbackData?.b64_json ? `data:image/png;base64,${fallbackData.b64_json}` : null) ||
+            null
+
+          if (!fallbackUrl) {
+            newImage.status = 'failed'
+            await insert('images', newImage)
+            return NextResponse.json({ error: 'Fallback response did not return a valid image', detail: fallbackData }, { status: 502 })
+          }
+
+          const completedFallback = { ...newImage, status: 'completed', image_url: fallbackUrl }
+          let remainingCoinsFallback: number
+          try {
+            remainingCoinsFallback = await deductUserCoins(user.id, coinsUsed)
+          } catch (coinError: any) {
+            return NextResponse.json({ error: coinError.message ?? 'Unable to deduct coins' }, { status: coinError.status ?? 500 })
+          }
+          try {
+            await insert('images', completedFallback)
+          } catch (dbError) {
+            await creditUserCoins(user.id, coinsUsed).catch(() => null)
+            throw dbError
+          }
+          return NextResponse.json({ image: { ...completedFallback, imageUrl: fallbackUrl }, coins: remainingCoinsFallback }, { status: 201 })
+        }
+
         newImage.status = 'failed'
         await insert('images', newImage)
         return NextResponse.json({ error: 'Image generation failed', detail: carubraData }, { status: response.status })
@@ -158,13 +316,14 @@ export async function POST(req: NextRequest) {
         await insert('images', newImage)
       } catch {}
 
-      // Detect network / timeout errors and return a clearer message
       const isConnectError =
         error?.cause?.code === 'UND_ERR_CONNECT_TIMEOUT' ||
         error?.cause?.code === 'ECONNREFUSED' ||
+        error?.cause?.code === 'ECONNRESET' ||
         error?.name === 'AbortError' ||
         String(error).includes('fetch failed') ||
-        String(error).includes('ConnectTimeout')
+        String(error).includes('ConnectTimeout') ||
+        String(error).includes('ECONNRESET')
 
       if (isConnectError) {
         return NextResponse.json(

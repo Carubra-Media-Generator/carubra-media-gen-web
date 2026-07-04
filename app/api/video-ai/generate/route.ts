@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   try {
-    const { prompt, style, duration, resolution = '480p' } = await req.json()
+    const { prompt, style, duration, resolution = '480p', init_image } = await req.json()
 
     if (!prompt || typeof prompt !== 'string') {
       return NextResponse.json({ error: 'Prompt is required' }, { status: 400 })
@@ -33,13 +33,37 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: configError.message }, { status: 500 })
     }
 
+    // Map quality / resolution to support DB constraint ('480p', '720p') and Veo max
+    let dbResolution = '480p'
+    if (resolution === '720p' || resolution === '1080p' || resolution === '2K') {
+      dbResolution = '720p'
+    }
+
+    // Map style / aspect ratio to DB constraint and Vertex AI supported options
+    let dbAspectRatio = '16:9'
+    let providerAspectRatio = '16:9'
+
+    if (style) {
+      const norm = style.replace('-', ':')
+      if (norm === '9:16' || norm === '3:4') {
+        dbAspectRatio = '9:16'
+        providerAspectRatio = '9:16'
+      } else if (norm === '1:1') {
+        dbAspectRatio = '1:1'
+        providerAspectRatio = '16:9' // Veo 2.0 fallback
+      } else {
+        dbAspectRatio = '16:9'
+        providerAspectRatio = '16:9'
+      }
+    }
+
     const newVideo = {
       id: uuidv4(),
       user_id: user.id,
       prompt,
-      model: 'text-to-video',
-      resolution,
-      aspect_ratio: style ? style.replace('-', ':') : '16:9',
+      model: init_image ? 'image-to-video' : 'text-to-video',
+      resolution: dbResolution,
+      aspect_ratio: dbAspectRatio,
       duration,
       coins_used: coinsUsed,
       status: 'processing',
@@ -47,12 +71,7 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      let aspect_ratio: string | undefined = undefined
-      if (style) {
-        aspect_ratio = style.replace('-', ':') // E.g. '16-9' -> '16:9'
-      }
-
-      console.log(`[video-ai] Calling Vertex AI with prompt: ${prompt}, Aspect Ratio: ${aspect_ratio}`)
+      console.log(`[video-ai] Calling Vertex AI with prompt: ${prompt}, Aspect Ratio: ${providerAspectRatio}`)
 
       let jobId: string
       try {
@@ -69,14 +88,23 @@ export async function POST(req: NextRequest) {
           instances: [
             {
               prompt: prompt,
+              ...(init_image ? {
+                image: {
+                  bytesBase64Encoded: init_image,
+                  mimeType: "image/jpeg" // Default to JPEG for image-to-video
+                }
+              } : {}),
             }
           ],
           parameters: {
             storageUri: outputGcsUri,
             sampleCount: 1,
-            ...(aspect_ratio ? { aspectRatio: aspect_ratio } : {}),
+            ...(providerAspectRatio ? { aspectRatio: providerAspectRatio } : {}),
           }
         }
+
+        console.log(`[video-ai] Image-to-video mode: ${init_image ? 'YES' : 'NO'}`)
+        console.log(`[video-ai] Init image length: ${init_image ? init_image.length : 0}`)
 
         console.log(`[video-ai] Vertex AI endpoint: ${endpoint}`)
         console.log(`[video-ai] Request body: ${JSON.stringify(requestBody)}`)
@@ -142,6 +170,9 @@ export async function POST(req: NextRequest) {
           console.log(`[video-ai] Vertex AI returned operation name: ${jobId}`)
         }
       } catch (vertexError: any) {
+        console.error('[video-ai] Vertex AI error:', vertexError)
+        console.error('[video-ai] Error message:', vertexError.message)
+        console.error('[video-ai] Error stack:', vertexError.stack)
         newVideo.status = 'failed'
         await insert('videos', newVideo)
 

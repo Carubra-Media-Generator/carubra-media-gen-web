@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
     // Generate signed URLs for videos with GCS URIs
     const videosWithSignedUrls = await Promise.all(
       videos.map(async (video: any) => {
-        if (video.video_url && video.video_url.startsWith('gs://')) {
+        if (video.video_url && typeof video.video_url === 'string' && video.video_url.startsWith('gs://')) {
           try {
             const signedUrl = await getSignedUrl(video.video_url)
             return { ...video, video_url: signedUrl }

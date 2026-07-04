@@ -36,13 +36,8 @@ const ASPECT_RATIOS: AspectRatio[] = [
   { id: "1:1",  label: "Square",        ratio: "1:1",  width: 1,  height: 1,  tw: "aspect-square"  },
   { id: "9:16", label: "Vertical",      ratio: "9:16", width: 9,  height: 16, tw: "aspect-[9/16]"  },
   { id: "16:9", label: "Widescreen",    ratio: "16:9", width: 16, height: 9,  tw: "aspect-video"   },
-  { id: "3:4",  label: "Portrait",      ratio: "3:4",  width: 3,  height: 4,  tw: "aspect-[3/4]"   },
   { id: "4:3",  label: "Standard",      ratio: "4:3",  width: 4,  height: 3,  tw: "aspect-[4/3]"   },
-  { id: "4:5",  label: "Feed",          ratio: "4:5",  width: 4,  height: 5,  tw: "aspect-[4/5]"   },
-  { id: "5:4",  label: "Classic",       ratio: "5:4",  width: 5,  height: 4,  tw: "aspect-[5/4]"   },
-  { id: "3:2",  label: "Photo",         ratio: "3:2",  width: 3,  height: 2,  tw: "aspect-[3/2]"   },
-  { id: "2:3",  label: "Portrait Photo",ratio: "2:3",  width: 2,  height: 3,  tw: "aspect-[2/3]"   },
-  { id: "21:9", label: "Cinema",        ratio: "21:9", width: 21, height: 9,  tw: "aspect-[21/9]"  },
+  { id: "3:4",  label: "Portrait",      ratio: "3:4",  width: 3,  height: 4,  tw: "aspect-[3/4]"   },
 ]
 
 const RESOLUTIONS: { id: Resolution; label: string; baseHeight: number; coinCost: number }[] = [
@@ -308,7 +303,7 @@ function DetailModal({
 
 export default function ImageAIPage() {
   const { t } = useLanguage()
-  const { user } = useAuth()
+  const { user, isBalanceLoaded } = useAuth()
 
   const [model, setModel] = useState<ImageModel>("text-to-image")
   const [aspectRatio, setAspectRatio] = useState<string>("1:1")
@@ -323,7 +318,8 @@ export default function ImageAIPage() {
   const [isCaptioning, setIsCaptioning] = useState(false)
   const [captionPrompt, setCaptionPrompt] = useState("")
 
-  const [coinBalance, setCoinBalance] = useState(0)
+  // Initialize from user.coins immediately to prevent 0-flash before API resolves
+  const [coinBalance, setCoinBalance] = useState<number>(user?.coins ?? 0)
   const [history, setHistory] = useState<HistoryItem[]>([])
 
   const [detailItem, setDetailItem] = useState<HistoryItem | null>(null)
@@ -379,14 +375,31 @@ export default function ImageAIPage() {
     window.dispatchEvent(new CustomEvent("carubra-balance-updated", { detail: { coins } }))
   }
 
+  // Clear temporary state on page unmount
   useEffect(() => {
-    const token = localStorage.getItem("carubra-token")
-    if (!token) return
-    fetch("/api/users/balance", { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json())
-      .then(data => setCoinBalance(data.coins ?? 0))
-      .catch(() => {})
+    return () => {
+      setResultImage(null)
+      setResultImageId(null)
+      setResultCaption("")
+      setPrompt("")
+      setSourceImage(null)
+      setCaptionPrompt("")
+    }
   }, [])
+
+  // Clear previous preview when user starts editing/entering a new prompt
+  useEffect(() => {
+    setResultImage(null)
+    setResultImageId(null)
+    setResultCaption("")
+  }, [prompt])
+
+  // Sync coin balance whenever auth context updates it (handles API fetch completion)
+  useEffect(() => {
+    if (typeof user?.coins === 'number') {
+      setCoinBalance(user.coins)
+    }
+  }, [user?.coins])
 
   useEffect(() => {
     const token = localStorage.getItem("carubra-token")
@@ -478,7 +491,7 @@ export default function ImageAIPage() {
       }
       if (model === "image-to-image" && sourceImage) {
         body.init_image = sourceImage.split(",")[1]
-        body.strength = 0.75
+        body.strength = 0.2 // Low strength to preserve identity
       }
 
       const token = localStorage.getItem("carubra-token")
@@ -527,7 +540,36 @@ export default function ImageAIPage() {
     }
   }
 
-  const handleDelete = (id: string) => setHistory(prev => prev.filter(item => item.id !== id))
+  const handleDelete = async (id: string) => {
+    const token = localStorage.getItem("carubra-token")
+    if (!token) return
+
+    // Temp IDs are numeric timestamps (Date.now().toString()); real DB IDs are UUIDs.
+    // Deleting a temp ID would silently fail in the API and reappear on next refresh.
+    const isRealId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+    if (!isRealId) {
+      // Just remove from UI — the item is still generating and has no DB record yet
+      setHistory(prev => prev.filter(item => item.id !== id))
+      return
+    }
+
+    try {
+      const res = await fetch(`/api/image-ai/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        console.error("Failed to delete image:", err)
+        // Still remove from UI even if API returned an error to avoid stuck items
+      }
+      setHistory(prev => prev.filter(item => item.id !== id))
+    } catch (error) {
+      console.error("Failed to delete image:", error)
+      // Remove from UI anyway so the user isn't stuck
+      setHistory(prev => prev.filter(item => item.id !== id))
+    }
+  }
 
   const handleSaveEdit = (id: string, newPrompt: string, newCaption: string) => {
     setHistory(prev => prev.map(item => item.id === id ? { ...item, prompt: newPrompt, caption: newCaption } : item))
@@ -667,6 +709,9 @@ export default function ImageAIPage() {
                     }
                   </div>
                   <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                  <p className="text-xs text-muted-foreground mt-2">
+                    💡 Tips: Jelaskan dengan spesifik apa yang ingin diubah (misal: "ubah warna rambut menjadi pirang", "tambah jenggot tipis") dan apa yang ingin dipertahankan (misal: "pertahankan wajah dan pakaian")
+                  </p>
                 </div>
               )}
 
@@ -730,14 +775,15 @@ export default function ImageAIPage() {
                 </div>
               </div>
 
-              {coinBalance < coinCost && (
+              {/* Only show insufficient balance warning AFTER balance has fully loaded to prevent flash */}
+              {isBalanceLoaded && coinBalance < coinCost && (
                 <div className="rounded-lg bg-destructive/10 border border-destructive/20 px-3 py-2 text-sm text-destructive flex items-center gap-2">
                   <XCircle className="h-4 w-4 flex-shrink-0" />Saldo koin tidak cukup.
                 </div>
               )}
 
               <Button onClick={handleGenerate}
-                disabled={isGenerating || !user || !prompt.trim() || coinBalance < coinCost || (model === "image-to-image" && !sourceImage)}
+                disabled={isGenerating || !user || !prompt.trim() || (isBalanceLoaded && coinBalance < coinCost) || (model === "image-to-image" && !sourceImage)}
                 className="w-full h-12 text-base font-semibold" size="lg">
                 {isGenerating
                   ? <><Loader2 className="h-5 w-5 mr-2 animate-spin" />Sedang Generate...</>

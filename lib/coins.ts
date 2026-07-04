@@ -8,7 +8,10 @@ export function getImageCoinCost(width: number, height: number): number {
 }
 
 export function getVideoCoinCost(resolution: unknown): number {
-  return resolution === '720p' ? 3 : 2
+  if (resolution === '2K') return 5
+  if (resolution === '1080p') return 4
+  if (resolution === '720p') return 3
+  return 2
 }
 
 async function getCurrentCoins(userId: string): Promise<number> {
