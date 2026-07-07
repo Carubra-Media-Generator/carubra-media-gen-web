@@ -113,7 +113,7 @@ export default function AdminInvoicesPage() {
   }
 
   const handleViewInvoice = (orderId: string) => {
-    window.open(`/member/invoice/${orderId}`, '_blank')
+    window.open(`/dashboard/member/invoice/${orderId}`, '_blank')
   }
 
   return (

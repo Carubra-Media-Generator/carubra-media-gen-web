@@ -191,6 +191,36 @@ export default function MemberPage() {
     }
   }
 
+  // ── Open invoice handler ──────────────────────────────────────────────────────
+  const handleOpenInvoice = async (orderId: string) => {
+    try {
+      const res = await fetch(`/api/payments/resolve-invoice?orderId=${orderId}`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("carubra-token")}`,
+        },
+      })
+      const data = await res.json()
+
+      if (data.status === "pending" && data.invoiceUrl) {
+        window.open(data.invoiceUrl, "_blank")
+        if (data.renewed) {
+          fetchTransactions()
+        }
+      } else if (data.status === "success") {
+        setErrorMsg("Pembayaran sudah selesai.")
+        fetchTransactions()
+      } else if (data.status === "expired" || data.status === "failed") {
+        setErrorMsg(data.message ?? "Invoice tidak dapat digunakan.")
+        fetchTransactions()
+      } else {
+        setErrorMsg(data.message ?? "Gagal membuka invoice.")
+      }
+    } catch (err: any) {
+      console.error("[handleOpenInvoice]", err)
+      setErrorMsg(err.message ?? "Gagal membuka invoice.")
+    }
+  }
+
   // ── Status helpers ──────────────────────────────────────────────────────────
   const statusLabel: Record<TransactionStatus, string> = {
     success: "Berhasil",
@@ -552,21 +582,23 @@ export default function MemberPage() {
                   </div>
 
                   <div className="flex flex-col items-end justify-between gap-3 min-w-[140px]">
-                    {tx.status === "pending" && tx.invoiceUrl && (
-                      <Button size="sm" asChild>
-                        <a
-                          href={tx.invoiceUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          Bayar Sekarang
-                        </a>
+                    {tx.status === "pending" && (
+                      <Button size="sm" onClick={() => handleOpenInvoice(tx.orderId)}>
+                        Bayar Sekarang
                       </Button>
                     )}
                     {tx.status === "expired" && (
                       <div className="text-right space-y-1">
                         <p className="text-xs text-muted-foreground">
-                          Invoice kedaluwarsa.
+                          Invoice kedaluwarsa pada{" "}
+                          {tx.createdAt
+                            ? new Date(tx.createdAt).toLocaleDateString("id-ID", {
+                                day: "2-digit",
+                                month: "short",
+                                year: "numeric",
+                              })
+                            : "tanggal tidak diketahui"}
+                          .
                         </p>
                         <Button
                           size="sm"

@@ -41,6 +41,7 @@ export async function POST(req: NextRequest) {
     const CAPTION_MODEL   = process.env.CAPTION_MODEL || 'utero/carubra-6.2.1'
 
     let caption: string
+    let usage: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | null = null
     let videoRecord = null
     if (videoId) {
       try {
@@ -104,6 +105,7 @@ Follow these strict rules:
 
         const data = await response.json()
         caption = data?.choices?.[0]?.message?.content ?? ''
+        usage = data?.usage ?? null
         
         if (!caption) {
           caption = generateFallbackCaption(script)
@@ -129,7 +131,7 @@ Follow these strict rules:
       }
     }
 
-    return NextResponse.json({ caption })
+    return NextResponse.json({ caption, usage })
   } catch (error: any) {
     return NextResponse.json({ error: 'Failed to generate caption', detail: String(error) }, { status: 502 })
   }

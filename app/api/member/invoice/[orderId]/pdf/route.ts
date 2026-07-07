@@ -13,7 +13,7 @@ export async function GET(
   try {
     const orderId = rawOrderId
 
-    const transaction = await findOne('transactions', { order_id: orderId })
+    const transaction = await findOne('transactions', { invoice_number: orderId })
     if (!transaction) {
       return NextResponse.json({ error: 'Transaction not found' }, { status: 404 })
     }
@@ -29,7 +29,7 @@ export async function GET(
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
-    const invoiceNumber = `INV-${transaction.order_id}`
+    const invoiceNumber = transaction.invoice_number ?? `INV-${orderId}`
     const paidDate = transaction.paid_at
       ? new Date(transaction.paid_at).toLocaleDateString('id-ID', {
           day: '2-digit', month: 'long', year: 'numeric',

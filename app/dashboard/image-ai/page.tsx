@@ -445,6 +445,7 @@ export default function ImageAIPage() {
       })
       const data = await response.json()
       const caption = data?.caption ?? ""
+      const usage = data?.usage ?? null
       setResultCaption(caption)
       setHistory(prev => prev.map(item =>
         (imageId ? item.id === imageId : item.imageUrl === imageUrl) ? { ...item, caption } : item
@@ -457,6 +458,9 @@ export default function ImageAIPage() {
         action: 'caption',
         model: 'image-caption',
         prompt: imagePrompt,
+        totalTokens: usage?.total_tokens ?? null,
+        promptTokens: usage?.prompt_tokens ?? null,
+        completionTokens: usage?.completion_tokens ?? null,
         metadata: { imageUrl, imageId },
       })
     } catch {
@@ -526,6 +530,9 @@ export default function ImageAIPage() {
         action: 'generate',
         model: model === 'image-to-image' ? 'image-to-image' : 'text-to-image',
         prompt,
+        totalTokens: null,
+        promptTokens: null,
+        completionTokens: null,
         metadata: { width, height, aspectRatio, resolution },
       })
       await handleGenerateCaption(imageUrl, prompt, imageId)
@@ -588,6 +595,7 @@ export default function ImageAIPage() {
       })
       const data = await response.json()
       const caption = data?.caption ?? ""
+      const usage = data?.usage ?? null
       setHistory(prev => prev.map(h => h.id === item.id ? { ...h, caption } : h))
       setDetailItem(prev => prev ? { ...prev, caption } : prev)
       await reportAiUsage({
@@ -595,6 +603,9 @@ export default function ImageAIPage() {
         action: 'regen-caption',
         model: 'image-caption',
         prompt: newPrompt,
+        totalTokens: usage?.total_tokens ?? null,
+        promptTokens: usage?.prompt_tokens ?? null,
+        completionTokens: usage?.completion_tokens ?? null,
         metadata: { imageId: item.id, imageUrl: item.imageUrl },
       })
     } catch {} finally {
@@ -629,6 +640,9 @@ export default function ImageAIPage() {
         action: 'regen-generate',
         model: 'text-to-image',
         prompt: newPrompt,
+        totalTokens: null,
+        promptTokens: null,
+        completionTokens: null,
         metadata: { imageId: item.id, width: item.width, height: item.height },
       })
     } catch {

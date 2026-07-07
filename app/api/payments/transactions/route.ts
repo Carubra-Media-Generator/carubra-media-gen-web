@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { find } from '@/lib/supabase'
 import { getUserFromRequest } from '@/middleware/auth'
+import { expireStaleInvoices } from '@/lib/expire-stale'
 
 // Map packageId string → title & priceLabel (karena kolom ini ga ada di DB)
 const packageMeta: Record<number, { title: string; priceLabel: string }> = {
@@ -28,6 +29,8 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   try {
+    await expireStaleInvoices()
+
     const rows = await find('transactions', { user_id: user.id }, {
       orderBy: 'created_at',
       ascending: false,

@@ -8,12 +8,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
+import {
+  Dialog, DialogContent, DialogTitle, DialogHeader, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog"
 import {
   Loader2, Video, Sparkles, Share2, Trash2, Edit2, Send,
   Coins, Info, XCircle, CheckCircle2, Clock, LayoutGrid,
   History, Share2 as TwitterIcon, Camera as InstagramIcon, Users as FacebookIcon, Zap, Upload,
-  Eye, Copy, Save, RotateCcw,
+  Eye, Copy, Save, RotateCcw, AlertTriangle,
 } from "lucide-react"
 import { useLanguage } from "@/contexts/language-context"
 import { useAuth } from "@/contexts/auth-context"
@@ -335,6 +337,8 @@ export default function VideoAIPage() {
   const [history, setHistory] = useState<VideoItem[]>([])
   
   const [activeResultId, setActiveResultId] = useState<string | null>(null)
+  const [showErrorModal, setShowErrorModal] = useState(false)
+  const [errorMessage, setErrorMessage] = useState("")
   const activeItem = activeResultId ? history.find(h => h.id === activeResultId) || null : null
 
   const [detailItem, setDetailItem] = useState<VideoItem | null>(null)
@@ -538,6 +542,7 @@ export default function VideoAIPage() {
       })
       const data = await response.json()
       const caption = data?.caption ?? ""
+      const usage = data?.usage ?? null
       setHistory(prev => prev.map(item =>
         item.id === videoId ? { ...item, caption } : item
       ))
@@ -546,6 +551,9 @@ export default function VideoAIPage() {
         action: 'caption',
         model: 'video-caption',
         prompt: script,
+        totalTokens: usage?.total_tokens ?? null,
+        promptTokens: usage?.prompt_tokens ?? null,
+        completionTokens: usage?.completion_tokens ?? null,
         metadata: { videoId },
       })
       return caption
@@ -635,7 +643,8 @@ export default function VideoAIPage() {
         ))
         setCoinBalance(prev => prev + coinCost)
         setIsGenerating(false)
-        alert(`Network error: ${fetchError.message || 'Could not connect to server'}`)
+        setErrorMessage(`Network error: ${fetchError.message || 'Could not connect to server'}`)
+        setShowErrorModal(true)
         return
       }
 
@@ -654,7 +663,8 @@ export default function VideoAIPage() {
         ))
         setCoinBalance(prev => prev + coinCost)
         setIsGenerating(false)
-        alert(`Video generation failed: ${errData.error || errorText || 'Unknown error'}`)
+        setErrorMessage(`Video generation failed: ${errData.error || errorText || 'Unknown error'}`)
+        setShowErrorModal(true)
         return
       }
 
@@ -669,6 +679,9 @@ export default function VideoAIPage() {
         action: 'generate',
         model: model,
         prompt: script,
+        totalTokens: null,
+        promptTokens: null,
+        completionTokens: null,
         metadata: { style: ratio, duration: parseInt(duration) },
       })
 
@@ -747,13 +760,6 @@ export default function VideoAIPage() {
     try {
       const caption = await handleGenerateCaption(newScript, item.id)
       setDetailItem(prev => prev ? { ...prev, caption } : prev)
-      await reportAiUsage({
-        apiName: 'video-ai.caption',
-        action: 'regen-caption',
-        model: 'video-caption',
-        prompt: newScript,
-        metadata: { videoId: item.id },
-      })
     } finally {
       setIsModalCaptioning(false)
     }
@@ -781,6 +787,9 @@ export default function VideoAIPage() {
         action: 'regen-generate',
         model: item.model,
         prompt: newScript,
+        totalTokens: null,
+        promptTokens: null,
+        completionTokens: null,
         metadata: { videoId: item.id, style: item.ratio, duration: item.duration },
       })
 
@@ -1175,6 +1184,28 @@ export default function VideoAIPage() {
         isRegenerating={isModalRegenerating}
         isCaptioning={isModalCaptioning}
       />
+
+      {/* Error Modal */}
+      <Dialog open={showErrorModal} onOpenChange={setShowErrorModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-red-100 rounded-full">
+                <AlertTriangle className="h-5 w-5 text-red-600" />
+              </div>
+              <DialogTitle>Error</DialogTitle>
+            </div>
+            <DialogDescription className="pt-2">
+              {errorMessage}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={() => setShowErrorModal(false)}>
+              Tutup
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -2,11 +2,14 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { ShieldCheck, FileText, Settings, Sparkles, Search, BarChart2, DollarSign } from "lucide-react"
+import { ShieldCheck, FileText, Settings, Sparkles, BarChart2, DollarSign, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/contexts/auth-context"
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog"
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -23,21 +26,6 @@ import {
 import { Bar, Pie } from "react-chartjs-2"
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, ArcElement, Filler, Title, Tooltip, Legend)
-
-type AdminUser = {
-  id: string
-  email: string
-  name: string
-  role: string
-  coins?: number
-  is_banned?: boolean
-  isBanned?: boolean
-  membership_order?: string
-  membershipOrder?: string
-  totalCreatedVideos?: number
-  connectedSocialAccounts?: number
-  createdAt?: string
-}
 
 type GeneratedContent = {
   id: string
@@ -156,13 +144,16 @@ export default function AdminDashboardPage() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
   const [stats, setStats] = useState<DashboardStats | null>(null)
-  const [users, setUsers] = useState<AdminUser[]>([])
   const [contents, setContents] = useState<GeneratedContent[]>([])
   const [monitoring, setMonitoring] = useState<AdminMonitoring | null>(null)
   const [monthlyTrend, setMonthlyTrend] = useState<{ labels: string[]; totals: number[] }>({ labels: [], totals: [] })
-  const [query, setQuery] = useState("")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  
+  // Modal states
+  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false)
+  const [modalMessage, setModalMessage] = useState("")
+  const [selectedContentId, setSelectedContentId] = useState<string | null>(null)
 
   const isAdmin = user?.role?.toString().toLowerCase().includes("admin")
 
@@ -182,15 +173,13 @@ export default function AdminDashboardPage() {
     setLoading(true)
     setError(null)
     try {
-      const [dashboardData, usersData, contentsData, monitoringData] = await Promise.all([
+      const [dashboardData, contentsData, monitoringData] = await Promise.all([
         apiFetch<DashboardStats>("/api/admin/dashboard"),
-        apiFetch<{ users: AdminUser[] }>("/api/admin/users"),
         apiFetch<{ contents: GeneratedContent[] }>("/api/admin/contents"),
         apiFetch<AdminMonitoring>("/api/admin/monitoring"),
       ])
 
       setStats(dashboardData)
-      setUsers(usersData.users)
       setContents(contentsData.contents)
       setMonitoring(monitoringData)
       setMonthlyTrend(buildMonthlyTrend(monitoringData.aiUsageLogs))
@@ -202,100 +191,22 @@ export default function AdminDashboardPage() {
     }
   }
 
-  const handleRoleChange = async (subject: AdminUser) => {
-    const nextRole = window.prompt(
-      `Ubah role untuk ${subject.email} (User / Developer / Admin / Developer/Admin)`,
-      subject.role || "User"
-    )
-    if (!nextRole) return
-    try {
-      await apiFetch(`/api/admin/users/${subject.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ role: nextRole }),
-      })
-      fetchAdminData()
-    } catch (err: any) {
-      setError(err.message)
-    }
-  }
-
-  const handleCoinsUpdate = async (subject: AdminUser) => {
-    const newValue = window.prompt(
-      `Masukkan saldo koin baru untuk ${subject.email}`,
-      String(subject.coins ?? 0)
-    )
-    if (newValue === null) return
-    const coins = Number(newValue)
-    if (Number.isNaN(coins)) {
-      setError("Nilai koin tidak valid")
-      return
-    }
-    try {
-      await apiFetch(`/api/admin/users/${subject.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ coins }),
-      })
-      fetchAdminData()
-    } catch (err: any) {
-      setError(err.message)
-    }
-  }
-
-  const handleBanToggle = async (subject: AdminUser) => {
-    const isBanned = subject.isBanned ?? subject.is_banned
-    const nextState = !isBanned
-    const confirmation = window.confirm(
-      `${nextState ? "Blokir" : "Batalkan blokir"} pengguna ${subject.email}?`
-    )
-    if (!confirmation) return
-    try {
-      await apiFetch(`/api/admin/users/${subject.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ is_banned: nextState }),
-      })
-      fetchAdminData()
-    } catch (err: any) {
-      setError(err.message)
-    }
-  }
-
-  const handleResetPassword = async (subject: AdminUser) => {
-    const nextPassword = window.prompt(
-      `Atur ulang kata sandi untuk ${subject.email}. Masukkan kata sandi baru:`
-    )
-    if (!nextPassword) return
-    try {
-      await apiFetch(`/api/admin/users/${subject.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ password: nextPassword }),
-      })
-      fetchAdminData()
-      window.alert("Kata sandi berhasil diatur ulang.")
-    } catch (err: any) {
-      setError(err.message)
-    }
-  }
-
   const handleDeleteContent = async (contentId: string) => {
-    const confirmed = window.confirm("Hapus konten ini secara permanen?")
-    if (!confirmed) return
+    setSelectedContentId(contentId)
+    setModalMessage("Hapus konten ini secara permanen?")
+    setShowDeleteConfirmModal(true)
+  }
+
+  const confirmDeleteContent = async () => {
+    if (!selectedContentId) return
     try {
-      await apiFetch(`/api/admin/contents/${contentId}`, { method: "DELETE" })
-      setContents((prev) => prev.filter((item) => item.id !== contentId))
+      await apiFetch(`/api/admin/contents/${selectedContentId}`, { method: "DELETE" })
+      setContents((prev) => prev.filter((item) => item.id !== selectedContentId))
+      setShowDeleteConfirmModal(false)
     } catch (err: any) {
       setError(err.message)
     }
   }
-
-  const filteredUsers = users.filter((subject) => {
-    const normalized = query.trim().toLowerCase()
-    return (
-      !normalized ||
-      subject.email.toLowerCase().includes(normalized) ||
-      subject.name.toLowerCase().includes(normalized) ||
-      subject.role.toLowerCase().includes(normalized)
-    )
-  })
 
   const hasAiLogs = (monitoring?.aiUsageLogs?.length ?? 0) > 0
   const hasMonthlyTrend = monthlyTrend.labels.length > 0
@@ -560,76 +471,30 @@ export default function AdminDashboardPage() {
         </div>
       )}
 
-      {/* Manajemen Pengguna + Sidebar */}
-      <div className="grid gap-4 xl:grid-cols-[20fr_0fr]">
-        <section id="users" className="space-y-3">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-sm uppercase tracking-[0.24em] text-muted-foreground">Pengguna</p>
-              <h2 className="text-2xl font-bold">Manajemen Pengguna</h2>
+      {/* Delete Confirmation Modal */}
+      <Dialog open={showDeleteConfirmModal} onOpenChange={setShowDeleteConfirmModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-red-100 rounded-full">
+                <AlertTriangle className="h-5 w-5 text-red-600" />
+              </div>
+              <DialogTitle>Hapus Konten</DialogTitle>
             </div>
-            <div className="flex items-center gap-2 rounded-3xl border border-border bg-background px-4 py-2">
-              <Search className="h-4 w-4 text-muted-foreground" />
-              <input
-                type="search"
-                placeholder="Cari email, nama, role..."
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-              />
-            </div>
-          </div>
-
-          <div className="overflow-x-auto rounded-3xl border border-border bg-background">
-            <table className="w-full table-fixed border-separate border-spacing-0 text-xs">
-              <thead className="bg-emerald-50 text-left text-xs uppercase tracking-[0.2em] text-emerald-700">                <tr>
-                  <th className="px-4 py-3">Email</th>
-                  <th className="px-4 py-3">Nama</th>
-                  <th className="px-4 py-3">Role</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-2 py-1">Koin</th>
-                  <th className="px-4 py-3">Aksi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredUsers.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-sm text-muted-foreground">
-                      Tidak ada pengguna yang cocok.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredUsers.map((subject) => (
-                    <tr key={subject.id} className="border-t border-border hover:bg-slate-50/70">
-                      <td className="px-4 py-4 font-medium">{subject.email}</td>
-                      <td className="px-4 py-4">{subject.name}</td>
-                      <td className="px-4 py-4">
-                        <Badge variant={subject.role.toLowerCase().includes("admin") ? "secondary" : "outline"}>
-                          {subject.role}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-4">
-                        <Badge variant={(subject.isBanned ?? subject.is_banned) ? "destructive" : "outline"}>
-                          {(subject.isBanned ?? subject.is_banned) ? "Diblokir" : "Aktif"}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-4">{subject.coins ?? 0}</td>
-                      <td className="px-4 py-4">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Button size="sm" variant="outline" onClick={() => handleRoleChange(subject)}>Ubah Role</Button>
-                          <Button size="sm" variant="outline" onClick={() => handleCoinsUpdate(subject)}>Koin</Button>
-                          <Button size="sm" variant="outline" onClick={() => handleBanToggle(subject)}>{(subject.isBanned ?? subject.is_banned) ? "Batal Blokir" : "Blokir"}</Button>
-                          <Button size="sm" variant="outline" onClick={() => handleResetPassword(subject)}>Reset PW</Button>
-                        </div>  
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      </div>
+            <DialogDescription className="pt-2">
+              {modalMessage}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteConfirmModal(false)}>
+              Batal
+            </Button>
+            <Button variant="destructive" onClick={confirmDeleteContent}>
+              Ya, Hapus
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

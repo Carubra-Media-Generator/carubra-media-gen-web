@@ -298,12 +298,16 @@ export default function AutoUploadPage() {
   const isConnected = (id: SocmedId) => connections.some(c => c.platform === id)
   const getConnection = (id: SocmedId) => connections.find(c => c.platform === id)
 
+  const [showErrorModal, setShowErrorModal] = useState(false)
+  const [errorMessage, setErrorMessage] = useState("")
+
   const startOAuth = async (id: SocmedId) => {
     try {
       const data = await apiFetch<{ url: string }>(`/api/social-connect/${id}/start`, { method: 'POST' })
       window.location.href = data.url
     } catch (e: any) {
-      alert(`Gagal memulai koneksi ${id}: ` + e.message)
+      setErrorMessage(`Gagal memulai koneksi ${id}: ${e.message}`)
+      setShowErrorModal(true)
     }
   }
 
@@ -376,7 +380,8 @@ export default function AutoUploadPage() {
       setDetailPlatform(null)
       setDisconnectConfirm(false)
     } catch (e: any) {
-      alert(`Gagal memutus: ${e.message}`)
+      setErrorMessage(`Gagal memutus: ${e.message}`)
+      setShowErrorModal(true)
     } finally {
       setIsDisconnecting(false)
     }
@@ -484,17 +489,21 @@ export default function AutoUploadPage() {
   }
 
   const [isRunning, setIsRunning] = useState(false)
+  const [showRunResultModal, setShowRunResultModal] = useState(false)
+  const [runResultMessage, setRunResultMessage] = useState("")
 
   const handleRunPending = async () => {
     setIsRunning(true)
     try {
       const data = await apiFetch<{ posted: number; failed: number; errors: string[] }>('/api/scheduled-posts/run', { method: 'POST' })
       const message = `Diproses: ${data.posted} berhasil, ${data.failed} gagal.`
-      alert(data.errors && data.errors.length ? `${message}\n
-${data.errors.join('\n')}` : message)
+      const fullMessage = data.errors && data.errors.length ? `${message}\n\n${data.errors.join('\n')}` : message
+      setRunResultMessage(fullMessage)
+      setShowRunResultModal(true)
       await fetchPosts()
     } catch (e: any) {
-      alert(`Gagal menjalankan jadwal: ${e.message}`)
+      setRunResultMessage(`Gagal menjalankan jadwal: ${e.message}`)
+      setShowRunResultModal(true)
     } finally {
       setIsRunning(false)
     }
@@ -505,7 +514,8 @@ ${data.errors.join('\n')}` : message)
       await apiFetch(`/api/scheduled-posts/${id}`, { method: "DELETE" })
       setPosts(prev => prev.filter(p => p._id !== id))
     } catch (e: any) {
-      alert(`Gagal hapus: ${e.message}`)
+      setErrorMessage(`Gagal hapus: ${e.message}`)
+      setShowErrorModal(true)
     }
   }
 
@@ -1072,6 +1082,50 @@ ${data.errors.join('\n')}` : message)
             <Button variant="outline" onClick={() => setShowIgInstructionDialog(false)}>Batal</Button>
             <Button onClick={handleProceedOAuth} className="gap-2">
               <Instagram className="h-4 w-4" /> Lanjut ke Instagram
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Error Modal */}
+      <Dialog open={showErrorModal} onOpenChange={setShowErrorModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-red-100 rounded-full">
+                <AlertCircle className="h-5 w-5 text-red-600" />
+              </div>
+              <DialogTitle>Error</DialogTitle>
+            </div>
+            <DialogDescription className="pt-2">
+              {errorMessage}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={() => setShowErrorModal(false)}>
+              Tutup
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Run Result Modal */}
+      <Dialog open={showRunResultModal} onOpenChange={setShowRunResultModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-100 rounded-full">
+                <RefreshCw className="h-5 w-5 text-blue-600" />
+              </div>
+              <DialogTitle>Hasil Eksekusi</DialogTitle>
+            </div>
+            <DialogDescription className="pt-2 whitespace-pre-line">
+              {runResultMessage}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={() => setShowRunResultModal(false)}>
+              Tutup
             </Button>
           </DialogFooter>
         </DialogContent>

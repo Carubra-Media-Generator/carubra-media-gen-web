@@ -1,3 +1,54 @@
+# Fix "Buka Invoice" & Invoice Detail Page
+
+## Problem
+
+1. **"Buka Invoice" on expired invoices** — The button opens the Xendit checkout URL, but Xendit shows "Your invoice has expired" for invoices older than 24h.
+2. **"Lihat Invoice" redirects to dashboard** — The page at `/member/invoice/[orderId]` is actually an admin transaction list page (fetches `/api/admin/transactions`), not an invoice detail page. Members get redirected to dashboard.
+
+## Fix 1: Hide "Buka Invoice" for expired/failed
+
+**File:** `app/dashboard/admin/membership/page.tsx:298`
+
+Change this:
+```tsx
+{tx.invoiceUrl && (
+  <Button size="sm" variant="outline" asChild className="text-xs">
+    <a href={tx.invoiceUrl} target="_blank" rel="noopener noreferrer">
+      Buka Invoice
+    </a>
+  </Button>
+)}
+```
+
+To this:
+```tsx
+{(tx.status === "pending" || tx.status === "success" || tx.status === "paid") && tx.invoiceUrl && (
+  <Button size="sm" variant="outline" asChild className="text-xs">
+    <a href={tx.invoiceUrl} target="_blank" rel="noopener noreferrer">
+      Buka Invoice
+    </a>
+  </Button>
+)}
+```
+
+## Fix 2: Add `invoiceUrl` to member invoice API
+
+**File:** `app/api/member/invoice/[orderId]/route.ts`
+
+Add `invoiceUrl` (from `transaction.xendit_payment_url`) to the returned invoice data so the detail page can show a "Bayar Sekarang" link for pending invoices.
+
+After line 52 (`amount: transaction.amount ?? 0`), add:
+```tsx
+invoiceUrl: transaction.xendit_payment_url ?? null,
+```
+
+## Fix 3: Rewrite member invoice detail page
+
+**File:** `app/dashboard/member/invoice/[orderId]/page.tsx` (replace entirely)
+
+Replace the admin transaction list page with a proper member-facing invoice detail page:
+
+```tsx
 "use client"
 
 import { useEffect, useState } from "react"
@@ -6,15 +57,6 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { useLanguage } from "@/contexts/language-context"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { AlertTriangle, Info } from "lucide-react"
 
 const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   success: { label: "LUNAS", variant: "default" },
@@ -31,12 +73,6 @@ export default function MemberInvoiceDetailPage() {
   const [invoice, setInvoice] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
-  
-  // Modal states
-  const [showExpiredModal, setShowExpiredModal] = useState(false)
-  const [showErrorModal, setShowErrorModal] = useState(false)
-  const [errorMessage, setErrorMessage] = useState("")
-  const [isRenewing, setIsRenewing] = useState(false)
 
   useEffect(() => {
     ;(async () => {
@@ -55,34 +91,6 @@ export default function MemberInvoiceDetailPage() {
       }
     })()
   }, [orderId])
-
-  const handleRenewInvoice = async () => {
-    try {
-      setIsRenewing(true)
-      const token = localStorage.getItem("carubra-token")
-      const res = await fetch(`/api/payments/create-invoice`, {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ packageId: invoice.packageId }),
-      })
-      const data = await res.json()
-      
-      if (!res.ok) {
-        throw new Error(data.error || "Gagal membuat invoice baru")
-      }
-      
-      setShowExpiredModal(false)
-      window.location.href = data.invoiceUrl
-    } catch (err: any) {
-      setIsRenewing(false)
-      setShowExpiredModal(false)
-      setErrorMessage(err.message || "Gagal membuat invoice baru. Silakan coba lagi.")
-      setShowErrorModal(true)
-    }
-  }
 
   if (loading) return (
     <div className="flex items-center justify-center min-h-[60vh]">
@@ -171,9 +179,9 @@ export default function MemberInvoiceDetailPage() {
               </Button>
             )}
             {invoice.status === "expired" && (
-              <Button size="sm" variant="outline" onClick={() => setShowExpiredModal(true)}>
-                Buat Invoice Baru
-              </Button>
+              <p className="text-sm text-muted-foreground">
+                Invoice telah kedaluwarsa. Silakan buat invoice baru dari dashboard.
+              </p>
             )}
             {(invoice.status === "success" || invoice.status === "paid") && (
               <Button variant="outline" asChild>
@@ -185,54 +193,20 @@ export default function MemberInvoiceDetailPage() {
           </div>
         </CardContent>
       </Card>
-
-      {/* Expired Invoice Modal */}
-      <Dialog open={showExpiredModal} onOpenChange={setShowExpiredModal}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-amber-100 rounded-full">
-                <AlertTriangle className="h-5 w-5 text-amber-600" />
-              </div>
-              <DialogTitle>Invoice Kedaluwarsa</DialogTitle>
-            </div>
-            <DialogDescription className="pt-2">
-              Invoice pembayaran ini telah kedaluwarsa dan tidak dapat digunakan lagi.
-              Apakah Anda ingin membuat invoice baru dengan paket yang sama?
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowExpiredModal(false)} disabled={isRenewing}>
-              Batal
-            </Button>
-            <Button onClick={handleRenewInvoice} disabled={isRenewing}>
-              {isRenewing ? "Memproses..." : "Buat Invoice Baru"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Error Modal */}
-      <Dialog open={showErrorModal} onOpenChange={setShowErrorModal}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-red-100 rounded-full">
-                <AlertTriangle className="h-5 w-5 text-red-600" />
-              </div>
-              <DialogTitle>Gagal</DialogTitle>
-            </div>
-            <DialogDescription className="pt-2">
-              {errorMessage}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button onClick={() => setShowErrorModal(false)}>
-              Tutup
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
+```
+
+## Summary of Changes
+
+| File | Change |
+|------|--------|
+| `admin/membership/page.tsx:298` | Add status check: only show "Buka Invoice" for pending/success/paid |
+| `api/member/invoice/[orderId]/route.ts` | Add `invoiceUrl` (xendit_payment_url) to API response |
+| `member/invoice/[orderId]/page.tsx` | Replace admin table page with proper member invoice detail page |
+
+After these changes:
+- "Buka Invoice" only appears for invoices that can actually be opened (pending/success)
+- Expired/failed invoices just show the status badge, no button
+- "Lihat Invoice" navigates to a proper invoice detail page that shows the right info

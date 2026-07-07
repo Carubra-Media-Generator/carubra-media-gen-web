@@ -1,10 +1,13 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { FileText } from "lucide-react"
+import { FileText, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { useAuth } from "@/contexts/auth-context"
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog"
 
 type GeneratedContent = {
   id: string
@@ -59,6 +62,11 @@ export default function AdminContentPage() {
   const [contents, setContents] = useState<GeneratedContent[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  
+  // Modal states
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [selectedContentId, setSelectedContentId] = useState<string | null>(null)
+  const [selectedContentTitle, setSelectedContentTitle] = useState("")
 
   useEffect(() => {
     if (!isLoading) {
@@ -110,9 +118,25 @@ export default function AdminContentPage() {
           <div className="space-y-3">
             {contents.slice(0, 8).map((item) => (
               <div key={item.id} className="rounded-3xl border border-border p-4">
-                <p className="font-semibold">{item.title || "(Tanpa judul)"}</p>
-                <p className="text-xs text-muted-foreground">{formatDate(item.created_at)}</p>
-                <p className="mt-2 text-sm text-muted-foreground line-clamp-3">{item.content ?? "Tidak ada konten."}</p>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold">{item.title || "(Tanpa judul)"}</p>
+                    <p className="text-xs text-muted-foreground">{formatDate(item.created_at)}</p>
+                    <p className="mt-2 text-sm text-muted-foreground line-clamp-3">{item.content ?? "Tidak ada konten."}</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-destructive hover:text-destructive"
+                    onClick={async () => {
+                      setSelectedContentId(item.id)
+                      setSelectedContentTitle(item.title || 'tanpa judul')
+                      setShowDeleteModal(true)
+                    }}
+                  >
+                    Hapus
+                  </Button>
+                </div>
               </div>
             ))}
             {contents.length === 0 && (
@@ -127,6 +151,40 @@ export default function AdminContentPage() {
           </Button>
         </CardContent>
       </Card>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-red-100 rounded-full">
+                <AlertTriangle className="h-5 w-5 text-red-600" />
+              </div>
+              <DialogTitle>Hapus Konten</DialogTitle>
+            </div>
+            <DialogDescription className="pt-2">
+              Hapus konten "{selectedContentTitle}" secara permanen?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteModal(false)}>
+              Batal
+            </Button>
+            <Button variant="destructive" onClick={async () => {
+              if (!selectedContentId) return
+              try {
+                await apiFetch(`/api/admin/contents/${selectedContentId}`, { method: 'DELETE' })
+                await loadContents()
+                setShowDeleteModal(false)
+              } catch (err: any) {
+                setError(err.message)
+              }
+            }}>
+              Ya, Hapus
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -41,6 +41,7 @@ export async function POST(req: NextRequest) {
     const CAPTION_MODEL = process.env.CAPTION_MODEL || 'utero/carubra-6.2.1'
 
     let caption: string
+    let usage: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | null = null
 
     if (CAPTION_API_KEY && CAPTION_API_URL) {
       // Try to use the API if configured
@@ -85,6 +86,7 @@ Follow these strict rules:
 
         const data = await response.json()
         caption = data?.choices?.[0]?.message?.content ?? ''
+        usage = data?.usage ?? null
         
         if (!caption) {
           // API returned empty caption, use fallback
@@ -112,7 +114,7 @@ Follow these strict rules:
       }
     }
 
-    return NextResponse.json({ caption })
+    return NextResponse.json({ caption, usage })
   } catch (error: any) {
     return NextResponse.json({ error: 'Failed to generate caption', detail: String(error) }, { status: 502 })
   }

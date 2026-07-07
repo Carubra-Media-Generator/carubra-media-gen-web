@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS public.transactions (
   coins_purchased integer DEFAULT 0,
   amount integer DEFAULT 0,
   payment_method text,
-  payment_status text DEFAULT 'pending',
+  payment_status text DEFAULT 'pending' CHECK (payment_status IN ('pending', 'paid', 'failed', 'refunded', 'expired')),
   xendit_invoice_id text,
   xendit_payment_url text,
   invoice_number text,

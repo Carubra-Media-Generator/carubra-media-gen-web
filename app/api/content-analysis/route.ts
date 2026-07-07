@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { CONTENT_STRATEGY_SYSTEM_PROMPT, buildUserPrompt } from "./prompts"
 import { getUserFromRequest } from "@/middleware/auth"
 import { insert, find } from "@/lib/supabase"
+import { logAiUsage } from "@/lib/log"
 
 
 export type StrategyResult = {
@@ -446,6 +447,20 @@ export async function POST(req: NextRequest) {
 		if (finishReason === 'length') {
 			console.warn('[content-analysis] Response truncated (finish_reason=length), will attempt repair')
 		}
+
+		const usage = aiData?.usage ?? null
+		const model = process.env.CONTENT_MODEL || 'google/gemini-2.5-flash'
+		logAiUsage(
+			user.id,
+			user.email,
+			'content-analysis',
+			model,
+			usage?.prompt_tokens ?? null,
+			usage?.completion_tokens ?? null,
+			usage?.total_tokens ?? null,
+			null,
+			{ action: 'analyze', prompt, platform, target_audience, content_type }
+		).catch(() => {})
 
 		let parsed: any
 		if (rawText === undefined || rawText === null) {

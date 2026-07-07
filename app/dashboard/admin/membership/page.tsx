@@ -6,6 +6,10 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { useLanguage } from "@/contexts/language-context"
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog"
+import { AlertTriangle } from "lucide-react"
 
 type TransactionStatus = "success" | "paid" | "pending" | "failed" | "expired" | "refunded"
 
@@ -60,6 +64,8 @@ export default function AdminInvoicesPage() {
   const [filtered, setFiltered] = useState<AdminTransaction[]>([])
   const [summary, setSummary] = useState<Summary | null>(null)
   const [loading, setLoading] = useState(true)
+  const [showErrorModal, setShowErrorModal] = useState(false)
+  const [errorMessage, setErrorMessage] = useState("")
   const [exporting, setExporting] = useState(false)
 
   // Filters
@@ -295,11 +301,29 @@ export default function AdminInvoicesPage() {
                     )}
                   </div>
                   <div className="flex flex-col items-end gap-2">
-                    {tx.invoiceUrl && (
-                      <Button size="sm" variant="outline" asChild className="text-xs">
-                        <a href={tx.invoiceUrl} target="_blank" rel="noopener noreferrer">
-                          Buka Invoice
-                        </a>
+                    {(tx.status === "pending" || tx.status === "success" || tx.status === "paid" || tx.status === "expired") && (
+                      <Button size="sm" variant="outline" className="text-xs" onClick={async () => {
+                        try {
+                          const token = localStorage.getItem('carubra-token')
+                          const res = await fetch(`/api/payments/resolve-invoice?orderId=${tx.invoiceId}`, {
+                            headers: { Authorization: `Bearer ${token}` },
+                          })
+                          const data = await res.json()
+                          if (data.status === "pending" && data.invoiceUrl) {
+                            window.open(data.invoiceUrl, "_blank")
+                          } else if (data.status === "success") {
+                            setErrorMessage("Pembayaran sudah selesai.")
+                            setShowErrorModal(true)
+                          } else {
+                            setErrorMessage(data.message ?? "Invoice tidak dapat dibuka.")
+                            setShowErrorModal(true)
+                          }
+                        } catch {
+                          setErrorMessage("Gagal membuka invoice.")
+                          setShowErrorModal(true)
+                        }
+                      }}>
+                        Buka Invoice
                       </Button>
                     )}
                   </div>
@@ -315,6 +339,28 @@ export default function AdminInvoicesPage() {
           Menampilkan {filtered.length} transaksi
         </p>
       )}
+
+      {/* Error Modal */}
+      <Dialog open={showErrorModal} onOpenChange={setShowErrorModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-red-100 rounded-full">
+                <AlertTriangle className="h-5 w-5 text-red-600" />
+              </div>
+              <DialogTitle>Peringatan</DialogTitle>
+            </div>
+            <DialogDescription className="pt-2">
+              {errorMessage}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={() => setShowErrorModal(false)}>
+              Tutup
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

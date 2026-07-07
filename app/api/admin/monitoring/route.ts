@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminUser, isAdminUser } from '@/lib/admin'
-import { find } from '@/lib/supabase'
+import { find, getSupabaseAdmin } from '@/lib/supabase'
 
 export async function GET(req: NextRequest) {
   const admin = await getAdminUser(req)
@@ -29,7 +29,22 @@ export async function GET(req: NextRequest) {
       })
       .filter(Boolean)
 
-    const totalRequests = usage.reduce((sum, record) => sum + (record.total_tokens ?? 0), 0)
+    // Get full counts and token sum from all records (not just the 20 most recent)
+    let totalEventCount = usage.length
+    let totalTokenSum = usage.reduce((sum, record) => sum + (record.total_tokens ?? 0), 0)
+    try {
+      const supabase = await getSupabaseAdmin()
+      const { data: countResult, error: countError } = await supabase
+        .from('ai_usage_logs')
+        .select('total_tokens')
+      if (!countError && countResult) {
+        totalEventCount = countResult.length
+        totalTokenSum = countResult.reduce((sum, record) => sum + (record.total_tokens ?? 0), 0)
+      }
+    } catch {
+      // Fall back to 20-record count if full query fails
+    }
+
     const latestUsage = usage[0] ?? null
 
     return NextResponse.json({
@@ -38,8 +53,8 @@ export async function GET(req: NextRequest) {
       aiUsageLogs: usage,
       missingTables,
       aiUsageSummary: {
-        totalEvents: usage.length,
-        totalTokens: totalRequests,
+        totalEvents: totalEventCount,
+        totalTokens: totalTokenSum,
         latestQuotaRemaining: latestUsage?.quota_remaining ?? null,
         latestUsageAt: latestUsage?.created_at ?? null,
       },
