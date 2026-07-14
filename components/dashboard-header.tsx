@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/contexts/auth-context"
+import { useLanguage } from "@/contexts/language-context"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { Coins } from "lucide-react"
 import React from "react"
@@ -13,6 +14,7 @@ const BALANCE_UPDATED_EVENT = 'carubra-balance-updated'
 export function DashboardHeader() {
   const router = useRouter()
   const { user, isBalanceLoaded } = useAuth()
+  const { t } = useLanguage()
 
   // Initialize coins from auth context immediately (avoids 0-flash before API resolves).
   // The auth context fetches the real balance on startup and updates user.coins.
@@ -69,7 +71,7 @@ export function DashboardHeader() {
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gradient-to-r from-primary/5 to-primary/10 border border-primary/10">
           <Coins className="h-4 w-4 text-yellow-600" />
           <div className="text-sm">{isBalanceLoaded ? coins : (user?.coins ?? 0)}</div>
-          <div className="text-xs text-muted-foreground ml-2">Koin</div>
+          <div className="text-xs text-muted-foreground ml-2">{t("header.coins")}</div>
         </div>
       </div>
 

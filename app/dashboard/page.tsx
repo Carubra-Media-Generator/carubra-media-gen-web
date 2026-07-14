@@ -79,7 +79,7 @@ export default function DashboardPage() {
         setConnections(connData.connections ?? [])
         setFetchError(null)
       } catch (err: any) {
-        setFetchError(err?.message || "Gagal memuat data")
+        setFetchError(err?.message || t("dashboard.fetchError"))
       } finally {
         setLoading(false)
       }
@@ -101,12 +101,12 @@ export default function DashboardPage() {
 
   const scheduledLabel =
     scheduledPosts.length > 0
-      ? `${scheduledPosts.length} konten sudah dijadwalkan`
-      : "Belum ada konten terjadwalkan"
+      ? t("dashboard.scheduledCount", { count: scheduledPosts.length })
+      : t("dashboard.noScheduled")
   const connectionLabel =
     connections.length > 0
-      ? `${connections.length} akun sudah terhubung`
-      : "Belum ada akun sosial yang terhubung"
+      ? t("dashboard.connectionCount", { count: connections.length })
+      : t("dashboard.noConnection")
 
   return (
     <div className="space-y-6">
@@ -116,13 +116,13 @@ export default function DashboardPage() {
           <div className="space-y-4 text-white">
             <div className="inline-flex items-center gap-3 rounded-full bg-white/10 px-4 py-2 text-xs uppercase tracking-[0.3em] text-emerald-200 shadow-sm shadow-emerald-500/10 backdrop-blur">
               <Sparkles className="h-4 w-4 text-emerald-200" />
-              Selamat datang di Carubra
+              {t("dashboard.welcomeBadge")}
             </div>
             <h1 className="text-4xl font-black tracking-tight lg:text-5xl">
-              Hai, {user?.name ?? "Creator"}.
+              {t("dashboard.greeting", { name: user?.name ?? "Creator" })} 
             </h1>
             <p className="max-w-2xl text-sm leading-7 text-slate-300 sm:text-base">
-              Platform marketing cerdas untuk konten sosial media kamu. Yuk cek jadwal konten dan lanjutkan ide kreatifmu dengan AI image/video.
+              {t("dashboard.description")}
             </p>
             <div className="flex flex-wrap gap-3">
               <button
@@ -130,7 +130,7 @@ export default function DashboardPage() {
                 onClick={() => router.push("/dashboard/auto-upload")}
                 className="inline-flex items-center gap-2 rounded-full bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-400"
               >
-                Atur Jadwal Konten
+                {t("dashboard.scheduleContent")}
                 <ArrowRight className="h-4 w-4" />
               </button>
               <button
@@ -138,7 +138,7 @@ export default function DashboardPage() {
                 onClick={() => router.push("/dashboard/image-ai")}
                 className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-semibold text-white transition hover:border-emerald-300 hover:text-emerald-200"
               >
-                Buat Konten AI
+                {t("dashboard.createAiContent")}
               </button>
             </div>
           </div>
@@ -158,17 +158,17 @@ export default function DashboardPage() {
           <Card className="bg-card">
             <CardHeader className="flex items-center justify-between gap-4 pb-2">
               <div>
-                <CardTitle className="text-base font-semibold">Ringkasan Konten</CardTitle>
+                <CardTitle className="text-base font-semibold">{t("dashboard.contentSummary")}</CardTitle>
                 <p className="text-sm text-muted-foreground">{scheduledLabel}</p>
               </div>
               <CalendarClock className="h-5 w-5 text-emerald-400" />
             </CardHeader>
             <CardContent className="space-y-4">
               {loading ? (
-                <div className="text-sm text-muted-foreground">Memuat jadwal...</div>
+                <div className="text-sm text-muted-foreground">{t("dashboard.loadingSchedule")}</div>
               ) : scheduledPosts.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/40 p-6 text-sm text-slate-300">
-                  Belum ada konten terjadwalkan. Bikin jadwal atau gunakan fitur Auto Upload sekarang.
+                  {t("dashboard.emptySchedule")}
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -177,7 +177,7 @@ export default function DashboardPage() {
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <p className="font-semibold text-white line-clamp-2">
-                            {post.caption || "Konten terjadwal"}
+                            {post.caption || t("dashboard.defaultCaption")}
                           </p>
                           <p className="text-xs text-muted-foreground">
                             {formatDateTime(post.date, post.time)} · {post.platforms.join(", ")}
@@ -198,7 +198,7 @@ export default function DashboardPage() {
             <Card className="bg-red-950/80 border border-red-700/40">
               <CardContent>
                 <p className="text-sm text-red-200">
-                  Terjadi kesalahan saat memuat data: {fetchError}
+                  {t("dashboard.loadError", { error: fetchError })}
                 </p>
               </CardContent>
             </Card>
@@ -209,7 +209,7 @@ export default function DashboardPage() {
           <Card className="bg-card">
             <CardHeader className="flex items-center justify-between gap-4 pb-2">
               <div>
-                <CardTitle className="text-base font-semibold">Status Koneksi</CardTitle>
+                <CardTitle className="text-base font-semibold">{t("dashboard.connectionStatus")}</CardTitle>
                 <p className="text-sm text-muted-foreground">{connectionLabel}</p>
               </div>
               <ShieldCheck className="h-5 w-5 text-emerald-400" />
@@ -217,15 +217,15 @@ export default function DashboardPage() {
             <CardContent className="space-y-4">
               <div className="rounded-3xl border border-white/10 bg-slate-950/70 p-4">
                 <div className="flex items-center justify-between gap-4">
-                  <p className="text-sm text-slate-200">Akun sosial yang terhubung</p>
+                  <p className="text-sm text-slate-200">{t("dashboard.connectedAccounts")}</p>
                   <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs text-emerald-200">
                     {connections.length}
                   </span>
                 </div>
                 <p className="mt-3 text-sm text-slate-400">
                   {connections.length > 0
-                    ? "Lihat Auto Upload untuk kelola akun dan koneksi lebih lanjut."
-                    : "Hubungkan Instagram, Facebook, TikTok, dan lainnya agar jadwal bisa dikirim otomatis."}
+                    ? t("dashboard.connectedAccountsDesc")
+                    : t("dashboard.connectionEmptyDesc")}
                 </p>
               </div>
               <button
@@ -233,7 +233,7 @@ export default function DashboardPage() {
                 onClick={() => router.push("/dashboard/auto-upload")}
                 className="inline-flex items-center gap-2 rounded-full bg-white/5 px-5 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
               >
-                Kelola Koneksi
+                {t("dashboard.manageConnections")}
                 <ArrowRight className="h-4 w-4" />
               </button>
             </CardContent>
@@ -242,20 +242,16 @@ export default function DashboardPage() {
           <Card className="bg-card">
             <CardHeader className="flex items-center justify-between gap-4 pb-2">
               <div>
-                <CardTitle className="text-base font-semibold">Pengingat</CardTitle>
-                <p className="text-sm text-muted-foreground">Kontenmu siap ditinjau</p>
+                <CardTitle className="text-base font-semibold">{t("dashboard.reminders")}</CardTitle>
+                <p className="text-sm text-muted-foreground">{t("dashboard.remindersSubtitle")}</p>
               </div>
               <CheckCircle2 className="h-5 w-5 text-indigo-400" />
             </CardHeader>
             <CardContent>
               <div className="space-y-3 text-sm text-slate-300">
-                <p>
-                  Pastikan deskripsi, hashtag, dan tipe postingan sudah sesuai sebelum jadwal dijalankan.
-                </p>
-                <p>
-                  Ingin lebih cepat? Gunakan fitur Image AI atau Video AI untuk konten berkualitas dengan cepat.
-                </p>
-                <p>Semakin lengkap koneksi sosial, semakin nyaman penjadwalan otomatis.</p>
+                <p>{t("dashboard.reminder1")}</p>
+                <p>{t("dashboard.reminder2")}</p>
+                <p>{t("dashboard.reminder3")}</p>
               </div>
             </CardContent>
           </Card>

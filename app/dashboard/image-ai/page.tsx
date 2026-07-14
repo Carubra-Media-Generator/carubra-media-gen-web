@@ -84,6 +84,7 @@ function DetailModal({
   onRegenCaption, onRegenImage,
   connectedSocmed, isRegenerating, isCaptioning
 }: DetailModalProps) {
+  const { t } = useLanguage()
   const [editPrompt, setEditPrompt] = useState("")
   const [editCaption, setEditCaption] = useState("")
   const [activeTab, setActiveTab] = useState<"view" | "edit">("view")
@@ -133,7 +134,7 @@ function DetailModal({
               {item.status === "success" && <CheckCircle2 className="h-3 w-3" />}
               {item.status === "failed" && <XCircle className="h-3 w-3" />}
               {item.status === "generating" && <Loader2 className="h-3 w-3 animate-spin" />}
-              {item.status === "success" ? "Selesai" : item.status === "failed" ? "Gagal" : "Proses..."}
+              {item.status === "success" ? t("videoAi.completed") : item.status === "failed" ? t("videoAi.failed") : t("videoAi.processing")}
             </Badge>
           </div>
         </div>
@@ -145,12 +146,12 @@ function DetailModal({
             ) : item.status === "generating" ? (
               <div className="flex flex-col items-center gap-3 text-muted-foreground">
                 <Loader2 className="h-10 w-10 animate-spin text-primary" />
-                <p className="text-sm">Membuat gambar...</p>
+                <p className="text-sm">{t("imageAi.generatingImage")}</p>
               </div>
             ) : (
               <div className="flex flex-col items-center gap-2 text-muted-foreground">
                 <XCircle className="h-10 w-10 opacity-30" />
-                <p className="text-sm">Gambar gagal dibuat</p>
+                <p className="text-sm">{t("videoAi.failed")}</p>
               </div>
             )}
           </div>
@@ -161,13 +162,13 @@ function DetailModal({
                 className={cn("flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-all",
                   activeTab === "view" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
                 )}>
-                <Eye className="h-3.5 w-3.5 inline mr-1.5" />Detail
+                <Eye className="h-3.5 w-3.5 inline mr-1.5" />{t("videoAi.detail")}
               </button>
               <button onClick={() => setActiveTab("edit")}
                 className={cn("flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-all",
                   activeTab === "edit" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
                 )}>
-                <Edit2 className="h-3.5 w-3.5 inline mr-1.5" />Edit
+                <Edit2 className="h-3.5 w-3.5 inline mr-1.5" />{t("videoAi.edit")}
               </button>
             </div>
 
@@ -175,53 +176,53 @@ function DetailModal({
               <div className="flex flex-col gap-4 flex-1">
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="rounded-lg bg-muted/50 px-3 py-2">
-                    <p className="text-muted-foreground mb-0.5">Model</p>
+                    <p className="text-muted-foreground mb-0.5">{t("imageAi.modalModel")}</p>
                     <p className="font-medium">{item.model === "text-to-image" ? "Text→Image" : "Image→Image"}</p>
                   </div>
                   <div className="rounded-lg bg-muted/50 px-3 py-2">
-                    <p className="text-muted-foreground mb-0.5">Rasio</p>
+                    <p className="text-muted-foreground mb-0.5">{t("imageAi.modalRatio")}</p>
                     <p className="font-medium">{item.aspectRatio}</p>
                   </div>
                   <div className="rounded-lg bg-muted/50 px-3 py-2">
-                    <p className="text-muted-foreground mb-0.5">Resolusi</p>
+                    <p className="text-muted-foreground mb-0.5">{t("imageAi.modalResolution")}</p>
                     <p className="font-medium">{item.resolution} ({item.width}×{item.height}px)</p>
                   </div>
                   <div className="rounded-lg bg-muted/50 px-3 py-2">
-                    <p className="text-muted-foreground mb-0.5">Durasi</p>
+                    <p className="text-muted-foreground mb-0.5">{t("imageAi.modalDuration")}</p>
                     <p className="font-medium">{item.durationMs ? `${(item.durationMs / 1000).toFixed(1)}s` : "—"}</p>
                   </div>
                 </div>
 
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <p className="text-xs font-semibold text-muted-foreground">CAPTION</p>
+                    <p className="text-xs font-semibold text-muted-foreground">{t("imageAi.captionLabel")}</p>
                     {item.caption && (
                       <button onClick={() => navigator.clipboard.writeText(item.caption)}
                         className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors">
-                        <Copy className="h-3 w-3" /> Copy
+                        <Copy className="h-3 w-3" /> {t("imageAi.copyCaption")}
                       </button>
                     )}
                   </div>
                   <p className="text-sm leading-relaxed bg-muted/40 rounded-lg px-3 py-2 whitespace-pre-line">
-                    {item.caption || (item.status === "generating" ? "Menyiapkan caption..." : "Tidak ada caption.")}
+                    {item.caption || (item.status === "generating" ? t("videoAi.preparingCaption") : t("imageAi.noCaption"))}
                   </p>
                 </div>
 
                 <div className="mt-auto flex flex-col gap-2">
                   <div className="flex gap-2">
                     <Button size="sm" variant="outline" className="flex-1 gap-1.5" onClick={handleDownload} disabled={!item.imageUrl}>
-                      <Download className="h-3.5 w-3.5" /> Download
+                      <Download className="h-3.5 w-3.5" /> {t("imageAi.download")}
                     </Button>
                     <Button size="sm" variant="outline" className="flex-1 gap-1.5"
                       onClick={() => item.imageUrl && navigator.clipboard.writeText(item.imageUrl)} disabled={!item.imageUrl}>
-                      <Copy className="h-3.5 w-3.5" /> Copy URL
+                      <Copy className="h-3.5 w-3.5" /> {t("imageAi.copyUrl")}
                     </Button>
                   </div>
 
                   {connectedSocmed.length > 0 && item.imageUrl && (
                     <div className="space-y-1.5">
                       <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-                        <Share2 className="h-3 w-3" /> BAGIKAN KE
+                        <Share2 className="h-3 w-3" /> {t("videoAi.shareTo")}
                       </p>
                       <div className="flex flex-wrap gap-1.5">
                         {connectedSocmed.includes("twitter") && (
@@ -229,7 +230,7 @@ function DetailModal({
                             shareSuccess === "twitter" ? "bg-green-500" : "bg-sky-500 hover:bg-sky-600")}
                             onClick={() => handleShare("twitter")}>
                             {shareSuccess === "twitter" ? <CheckCircle2 className="h-3.5 w-3.5" /> : <TwitterIcon className="h-3.5 w-3.5" />}
-                            {shareSuccess === "twitter" ? "Dibagikan!" : "Twitter / X"}
+                            {shareSuccess === "twitter" ? t("imageAi.shared") : t("imageAi.twitter")}
                           </Button>
                         )}
                         {connectedSocmed.includes("instagram") && (
@@ -237,7 +238,7 @@ function DetailModal({
                             shareSuccess === "instagram" ? "bg-green-500" : "bg-gradient-to-r from-pink-500 to-purple-600")}
                             onClick={() => handleShare("instagram")}>
                             {shareSuccess === "instagram" ? <CheckCircle2 className="h-3.5 w-3.5" /> : <InstagramIcon className="h-3.5 w-3.5" />}
-                            {shareSuccess === "instagram" ? "Dibagikan!" : "Instagram"}
+                            {shareSuccess === "instagram" ? t("imageAi.shared") : t("imageAi.instagram")}
                           </Button>
                         )}
                         {connectedSocmed.includes("facebook") && (
@@ -245,7 +246,7 @@ function DetailModal({
                             shareSuccess === "facebook" ? "bg-green-500" : "bg-blue-600 hover:bg-blue-700")}
                             onClick={() => handleShare("facebook")}>
                             {shareSuccess === "facebook" ? <CheckCircle2 className="h-3.5 w-3.5" /> : <FacebookIcon className="h-3.5 w-3.5" />}
-                            {shareSuccess === "facebook" ? "Dibagikan!" : "Facebook"}
+                            {shareSuccess === "facebook" ? t("imageAi.shared") : t("imageAi.facebook")}
                           </Button>
                         )}
                       </div>
@@ -255,7 +256,7 @@ function DetailModal({
                   <Button size="sm" variant="outline"
                     className="w-full gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30"
                     onClick={() => { onDelete(item.id); onClose() }}>
-                    <Trash2 className="h-3.5 w-3.5" /> Hapus Gambar
+                    <Trash2 className="h-3.5 w-3.5" /> {t("imageAi.deleteImage")}
                   </Button>
                 </div>
               </div>
@@ -264,30 +265,30 @@ function DetailModal({
             {activeTab === "edit" && (
               <div className="flex flex-col gap-4 flex-1">
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-muted-foreground">PROMPT GAMBAR</Label>
+                  <Label className="text-xs font-semibold text-muted-foreground">{t("imageAi.editPromptLabel")}</Label>
                   <Textarea value={editPrompt} onChange={e => setEditPrompt(e.target.value)}
-                    rows={4} className="resize-none text-sm" placeholder="Edit prompt untuk generate ulang gambar..." />
+                    rows={4} className="resize-none text-sm" placeholder={t("imageAi.editPromptPlaceholder")} />
                   <Button size="sm" variant="outline" className="w-full gap-1.5"
                     disabled={isRegenerating || !editPrompt.trim()} onClick={() => onRegenImage(item, editPrompt)}>
                     {isRegenerating
-                      ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating...</>
-                      : <><RotateCcw className="h-3.5 w-3.5" /> Generate Ulang Gambar</>}
+                      ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> {t("imageAi.generatingLong")}</>
+                      : <><RotateCcw className="h-3.5 w-3.5" /> {t("imageAi.regenImage")}</>}
                   </Button>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-muted-foreground">CAPTION</Label>
+                  <Label className="text-xs font-semibold text-muted-foreground">{t("imageAi.captionLabel")}</Label>
                   <Textarea value={editCaption} onChange={e => setEditCaption(e.target.value)}
-                    rows={4} className="resize-none text-sm" placeholder="Edit caption..." />
+                    rows={4} className="resize-none text-sm" placeholder={t("imageAi.editCaptionPlaceholder")} />
                   <Button size="sm" variant="outline" className="w-full gap-1.5"
                     disabled={isCaptioning || !item.imageUrl} onClick={() => onRegenCaption(item, editCaption || editPrompt)}>
                     {isCaptioning
-                      ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Membuat Caption...</>
-                      : <><Sparkles className="h-3.5 w-3.5" /> Generate Ulang Caption</>}
+                      ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> {t("imageAi.captionGenerating")}</>
+                      : <><Sparkles className="h-3.5 w-3.5" /> {t("imageAi.regenCaption")}</>}
                   </Button>
                 </div>
                 <div className="mt-auto">
                   <Button size="sm" className="w-full gap-1.5" onClick={handleSave}>
-                    <Save className="h-3.5 w-3.5" /> Simpan Perubahan
+                    <Save className="h-3.5 w-3.5" /> {t("imageAi.saveChanges")}
                   </Button>
                 </div>
               </div>
@@ -465,7 +466,7 @@ export default function ImageAIPage() {
       })
     } catch (err) {
       console.error('[image-ai] Frontend - caption generation failed:', err)
-      setResultCaption("Gagal membuat caption.")
+      setResultCaption(t("imageAi.captionFailed"))
     } finally {
       setIsCaptioning(false)
     }
@@ -681,9 +682,9 @@ export default function ImageAIPage() {
         <div>
           <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
             <Sparkles className="h-8 w-8 text-primary" />
-            Image AI
+            {t("imageAi.header")}
           </h1>
-          <p className="text-muted-foreground mt-1">Buat gambar dengan AI dari deskripsi teks</p>
+          <p className="text-muted-foreground mt-1">{t("imageAi.headerDesc")}</p>
         </div>
       </div>
 
@@ -694,21 +695,21 @@ export default function ImageAIPage() {
             <CardHeader className="pb-4">
               <CardTitle className="flex items-center gap-2 text-lg">
                 <Zap className="h-5 w-5 text-primary" />
-                Generate Gambar
+                {t("imageAi.generateForm")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-5">
 
               {/* Model */}
               <div className="space-y-2">
-                <Label className="text-sm font-semibold">Model</Label>
+                <Label className="text-sm font-semibold">{t("imageAi.model")}</Label>
                 <div className="grid grid-cols-2 gap-2">
                   {(["text-to-image", "image-to-image"] as ImageModel[]).map(m => (
                     <button key={m} onClick={() => setModel(m)}
                       className={cn("rounded-lg border-2 px-3 py-2.5 text-sm font-medium transition-all",
                         model === m ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:border-primary/50"
                       )}>
-                      {m === "text-to-image" ? "Text to Image" : "Image to Image"}
+                      {m === "text-to-image" ? t("imageAi.textToImage") : t("imageAi.imageToImage")}
                     </button>
                   ))}
                 </div>
@@ -717,26 +718,26 @@ export default function ImageAIPage() {
               {/* Image Upload */}
               {model === "image-to-image" && (
                 <div className="space-y-2">
-                  <Label className="text-sm font-semibold">Gambar Sumber</Label>
+                  <Label className="text-sm font-semibold">{t("imageAi.sourceImage")}</Label>
                   <div onClick={() => fileInputRef.current?.click()}
                     className={cn("border-2 border-dashed rounded-xl cursor-pointer transition-colors flex flex-col items-center justify-center gap-2 p-4 min-h-[120px]",
                       sourceImage ? "border-primary/50" : "border-border hover:border-primary/50"
                     )}>
                     {sourceImage
                       ? <img src={sourceImage} alt="source" className="max-h-32 rounded-lg object-contain" />
-                      : <><Upload className="h-8 w-8 text-muted-foreground" /><span className="text-sm text-muted-foreground">Klik untuk upload gambar</span></>
+                      : <><Upload className="h-8 w-8 text-muted-foreground" /><span className="text-sm text-muted-foreground">{t("imageAi.clickToUpload")}</span></>
                     }
                   </div>
                   <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
                   <p className="text-xs text-muted-foreground mt-2">
-                    💡 Tips: Jelaskan dengan spesifik apa yang ingin diubah (misal: "ubah warna rambut menjadi pirang", "tambah jenggot tipis") dan apa yang ingin dipertahankan (misal: "pertahankan wajah dan pakaian")
+                    💡 {t("imageAi.tipLabel")} {t("imageAi.tipText")}
                   </p>
                 </div>
               )}
 
               {/* Aspect Ratio */}
               <div className="space-y-2">
-                <Label className="text-sm font-semibold">Rasio Gambar</Label>
+                <Label className="text-sm font-semibold">{t("imageAi.aspectRatio")}</Label>
                 <div className="grid grid-cols-5 gap-1.5">
                   {ASPECT_RATIOS.map(r => (
                     <button key={r.id} onClick={() => setAspectRatio(r.id)} title={`${r.label} (${r.ratio})`}
@@ -759,7 +760,7 @@ export default function ImageAIPage() {
 
               {/* Resolution */}
               <div className="space-y-2">
-                <Label className="text-sm font-semibold">Resolusi Output</Label>
+                <Label className="text-sm font-semibold">{t("imageAi.resolution")}</Label>
                 <div className="grid grid-cols-4 gap-2">
                   {RESOLUTIONS.map(r => (
                     <button key={r.id} onClick={() => setResolution(r.id)}
@@ -767,37 +768,37 @@ export default function ImageAIPage() {
                         resolution === r.id ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:border-primary/50"
                       )}>
                       <span className="font-semibold">{r.label}</span>
-                      <span className="text-[10px] opacity-70">{r.coinCost} koin</span>
+                      <span className="text-[10px] opacity-70">{r.coinCost} {t("header.coins")}</span>
                     </button>
                   ))}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Output: {previewW}×{previewH}px
+                  {t("imageAi.outputSize", { w: previewW, h: previewH })}
                 </p>
               </div>
 
               {/* Prompt */}
               <div className="space-y-2">
-                <Label htmlFor="prompt" className="text-sm font-semibold">Deskripsi Gambar</Label>
-                <Textarea id="prompt" placeholder="Deskripsikan gambar yang ingin kamu buat..."
+                <Label htmlFor="prompt" className="text-sm font-semibold">{t("imageAi.prompt")}</Label>
+                <Textarea id="prompt" placeholder={t("imageAi.promptPlaceholder")}
                   value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={5} className="resize-none text-sm" />
               </div>
 
               {/* Cost */}
               <div className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Info className="h-4 w-4" /><span>Biaya generate</span>
+                  <Info className="h-4 w-4" /><span>{t("imageAi.coinCost")}</span>
                 </div>
                 <div className="flex items-center gap-1 font-semibold text-sm">
                   <Coins className="h-4 w-4 text-amber-500" />
-                  <span className="text-amber-600">{coinCost} koin</span>
+                  <span className="text-amber-600">{coinCost} {t("header.coins")}</span>
                 </div>
               </div>
 
               {/* Only show insufficient balance warning AFTER balance has fully loaded to prevent flash */}
               {isBalanceLoaded && coinBalance < coinCost && (
                 <div className="rounded-lg bg-destructive/10 border border-destructive/20 px-3 py-2 text-sm text-destructive flex items-center gap-2">
-                  <XCircle className="h-4 w-4 flex-shrink-0" />Saldo koin tidak cukup.
+                  <XCircle className="h-4 w-4 flex-shrink-0" />{t("imageAi.insufficientBalance")}
                 </div>
               )}
 
@@ -805,8 +806,8 @@ export default function ImageAIPage() {
                 disabled={isGenerating || !user || !prompt.trim() || (isBalanceLoaded && coinBalance < coinCost) || (model === "image-to-image" && !sourceImage)}
                 className="w-full h-12 text-base font-semibold" size="lg">
                 {isGenerating
-                  ? <><Loader2 className="h-5 w-5 mr-2 animate-spin" />Sedang Generate...</>
-                  : <><Sparkles className="h-5 w-5 mr-2" />Generate Gambar</>}
+                  ? <><Loader2 className="h-5 w-5 mr-2 animate-spin" />{t("imageAi.generatingState")}</>
+                  : <><Sparkles className="h-5 w-5 mr-2" />{t("imageAi.generate")}</>}
               </Button>
             </CardContent>
           </Card>
@@ -818,7 +819,7 @@ export default function ImageAIPage() {
             <CardHeader className="pb-4">
               <CardTitle className="flex items-center gap-2 text-lg">
                 <ImageIcon className="h-5 w-5 text-primary" />
-                Hasil Generate
+                {t("imageAi.resultTitle")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -827,15 +828,15 @@ export default function ImageAIPage() {
                 {isGenerating ? (
                   <div className="flex flex-col items-center gap-3 text-muted-foreground">
                     <Loader2 className="h-10 w-10 animate-spin text-primary" />
-                    <p className="text-sm font-medium">Membuat gambar...</p>
-                    <p className="text-xs opacity-60">Ini mungkin memerlukan beberapa detik</p>
+                    <p className="text-sm font-medium">{t("imageAi.generatingImage")}</p>
+                    <p className="text-xs opacity-60">{t("imageAi.mayTakeSeconds")}</p>
                   </div>
                 ) : resultImage ? (
                   <img src={resultImage} alt="Generated" className="w-full h-full object-contain rounded-xl" />
                 ) : (
                   <div className="flex flex-col items-center gap-3 text-muted-foreground p-8 text-center">
                     <ImageIcon className="h-12 w-12 opacity-30" />
-                    <p className="text-sm">Hasil gambar akan tampil di sini</p>
+                    <p className="text-sm">{t("imageAi.waitingResult")}</p>
                   </div>
                 )}
               </div>
@@ -843,13 +844,13 @@ export default function ImageAIPage() {
               {resultImage && (
                 <div className="flex flex-wrap gap-2">
                   <a href={resultImage} download="generated-image.png">
-                    <Button size="sm" variant="outline" className="gap-2"><Download className="h-4 w-4" /> Download</Button>
+                    <Button size="sm" variant="outline" className="gap-2"><Download className="h-4 w-4" /> {t("imageAi.download")}</Button>
                   </a>
                   <Button size="sm" variant="outline" className="gap-2" onClick={() => navigator.clipboard.writeText(resultImage)}>
-                    <Copy className="h-4 w-4" /> Copy URL
+                    <Copy className="h-4 w-4" /> {t("imageAi.copyUrl")}
                   </Button>
                   <Button size="sm" variant="outline" className="gap-2" onClick={() => { setResultImage(null); setResultCaption("") }}>
-                    <RefreshCw className="h-4 w-4" /> Reset
+                    <RefreshCw className="h-4 w-4" /> {t("imageAi.reset")}
                   </Button>
                 </div>
               )}
@@ -857,21 +858,21 @@ export default function ImageAIPage() {
               {resultImage && (
                 <div className="space-y-2">
                   <Label className="text-sm font-semibold flex items-center gap-2">
-                    <Share2 className="h-4 w-4" /> Bagikan ke Sosial Media
+                    <Share2 className="h-4 w-4" /> {t("imageAi.shareToSocial")}
                   </Label>
                   <div className="flex flex-wrap gap-2">
                     {connectedSocmed.includes("twitter") && (
                       <Button size="sm" className="gap-2 bg-sky-500 hover:bg-sky-600 text-white border-0">
-                        <TwitterIcon className="h-4 w-4" /> Twitter / X
+                        <TwitterIcon className="h-4 w-4" /> {t("imageAi.twitter")}
                       </Button>
                     )}
                     {connectedSocmed.includes("instagram") && (
                       <Button size="sm" className="gap-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white border-0">
-                        <InstagramIcon className="h-4 w-4" /> Instagram
+                        <InstagramIcon className="h-4 w-4" /> {t("imageAi.instagram")}
                       </Button>
                     )}
                     {connectedSocmed.length === 0 && (
-                      <p className="text-sm text-muted-foreground">Belum ada akun sosmed yang terhubung.</p>
+                      <p className="text-sm text-muted-foreground">{t("imageAi.noAccounts")}</p>
                     )}
                   </div>
                 </div>
@@ -879,14 +880,14 @@ export default function ImageAIPage() {
 
               {resultImage && (
                 <div className="space-y-3 border-t pt-4">
-                  <Label className="text-sm font-semibold">Generate Caption</Label>
+                  <Label className="text-sm font-semibold">{t("imageAi.generateCaption")}</Label>
                   {isCaptioning && !resultCaption && (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" /><span>Membuat caption...</span>
+                      <Loader2 className="h-4 w-4 animate-spin" /><span>{t("imageAi.generatingCaption")}</span>
                     </div>
                   )}
                   <div className="flex gap-2">
-                    <Textarea placeholder="Minta caption sesuai gambar..."
+                    <Textarea placeholder={t("imageAi.captionPlaceholder")}
                       value={captionPrompt} onChange={(e) => setCaptionPrompt(e.target.value)}
                       rows={2} className="resize-none text-sm flex-1" />
                     <Button onClick={() => resultImage && handleGenerateCaption(resultImage, captionPrompt || prompt, resultImageId ?? undefined)}
@@ -915,15 +916,15 @@ export default function ImageAIPage() {
         <CardContent className="pt-4">
           <Tabs defaultValue="history">
             <TabsList className="mb-4">
-              <TabsTrigger value="history" className="gap-2"><History className="h-4 w-4" /> History Generate</TabsTrigger>
-              <TabsTrigger value="gallery" className="gap-2"><LayoutGrid className="h-4 w-4" /> Galeri Gambar</TabsTrigger>
+              <TabsTrigger value="history" className="gap-2"><History className="h-4 w-4" /> {t("imageAi.historyTab")}</TabsTrigger>
+              <TabsTrigger value="gallery" className="gap-2"><LayoutGrid className="h-4 w-4" /> {t("imageAi.galleryTab")}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="history">
               {history.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <History className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                  <p className="text-sm">Belum ada riwayat generate</p>
+                  <p className="text-sm">{t("imageAi.noHistory")}</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -956,7 +957,7 @@ export default function ImageAIPage() {
                           <span>{item.createdAt.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}</span>
                         </div>
                         {item.caption && (
-                          <p className="text-xs text-muted-foreground mt-1 line-clamp-1 italic">Caption: {item.caption}</p>
+                          <p className="text-xs text-muted-foreground mt-1 line-clamp-1 italic">{t("imageAi.captionPrefix")} {item.caption}</p>
                         )}
                       </div>
                       <div className="flex-shrink-0 flex flex-col items-end gap-2" onClick={e => e.stopPropagation()}>
@@ -964,7 +965,7 @@ export default function ImageAIPage() {
                           {item.status === "success" && <CheckCircle2 className="h-3 w-3" />}
                           {item.status === "failed" && <XCircle className="h-3 w-3" />}
                           {item.status === "generating" && <Loader2 className="h-3 w-3 animate-spin" />}
-                          {item.status === "success" ? "Selesai" : item.status === "failed" ? "Gagal" : "Proses..."}
+{item.status === "success" ? t("videoAi.completed") : item.status === "failed" ? t("videoAi.failed") : t("videoAi.processing")}
                         </Badge>
                         <div className="flex items-center gap-1">
                           <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openDetail(item)}>
@@ -986,7 +987,7 @@ export default function ImageAIPage() {
               {history.filter(h => h.imageUrl).length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <LayoutGrid className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                  <p className="text-sm">Belum ada gambar di galeri</p>
+                  <p className="text-sm">{t("imageAi.noGallery")}</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">

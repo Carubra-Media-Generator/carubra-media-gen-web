@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import { useLanguage } from "@/contexts/language-context"
 import { Card, CardContent } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import {
@@ -55,7 +56,7 @@ type HistoryJob = {
   prompt: string
   platform: string
   target_audience: string
-  status: "completed" | "processing" | "failed"
+  status: "completed" | "processing" | "failed" | "cancelled"
   created_at: string
   result: StrategyResult | null
 }
@@ -100,13 +101,13 @@ function apiFetch(path: string, options?: RequestInit) {
   })
 }
 
-function timeAgo(iso: string) {
+function timeAgo(iso: string, t: (key: string, params?: any) => string) {
   const diff = Date.now() - new Date(iso).getTime()
   const h = Math.floor(diff / 3600000)
   const d = Math.floor(diff / 86400000)
-  if (d > 0) return `${d} hari lalu`
-  if (h > 0) return `${h} jam lalu`
-  return "Baru saja"
+  if (d > 0) return t("analytics.timeAgoDays", { d })
+  if (h > 0) return t("analytics.timeAgoHours", { h })
+  return t("analytics.timeAgoJustNow")
 }
 
 function platformIcon(p: string) {
@@ -117,16 +118,17 @@ function platformIcon(p: string) {
   return icons[p] ?? "🌐"
 }
 
-function priorityColor(priority: string) {
+function priorityColor(priority: string, t: (key: string) => string) {
   return {
-    high:   { bg: "#FCEBEB", color: "#A32D2D", label: "Penting" },
-    medium: { bg: "#FAEEDA", color: "#854F0B", label: "Disarankan" },
-    low:    { bg: "#EAF3DE", color: "#3B6D11", label: "Opsional" },
+    high:   { bg: "#FCEBEB", color: "#A32D2D", label: t("analytics.priorityHigh") },
+    medium: { bg: "#FAEEDA", color: "#854F0B", label: t("analytics.priorityMedium") },
+    low:    { bg: "#EAF3DE", color: "#3B6D11", label: t("analytics.priorityLow") },
   }[priority] ?? { bg: "#F1EFE8", color: "#5F5E5A", label: "" }
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function ContentStrategyPage() {
+  const { t } = useLanguage()
   // Form state
   const [prompt, setPrompt]               = useState("")
   const [platform, setPlatform]           = useState("TikTok")
@@ -146,6 +148,8 @@ export default function ContentStrategyPage() {
   // History state
   const [history, setHistory]             = useState<HistoryJob[]>([])
   const [historyLoading, setHistoryLoading] = useState(true)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [cancellingId, setCancellingId] = useState<string | null>(null)
 
   // Trend chart labels
   const trendLabels = Array.from({ length: 30 }, (_, i) => {
@@ -184,7 +188,7 @@ export default function ContentStrategyPage() {
   // ─── Submit ───────────────────────────────────────────────────────────────
   const handleGenerate = async () => {
     setError(null)
-    if (!prompt.trim()) return setError("Deskripsikan konten yang ingin kamu buat")
+    if (!prompt.trim()) return setError(t("analytics.promptRequired"))
 
     setLoading(true)
     setResult(null)
@@ -201,7 +205,7 @@ export default function ContentStrategyPage() {
       })
 
       const json = await res.json()
-      if (!res.ok) throw new Error(json.error || "Gagal generate strategi")
+      if (!res.ok) throw new Error(json.error || t("analytics.generateFailed"))
 
       setResult(json.job.result)
       setActiveJobId(json.job.id)
@@ -211,6 +215,38 @@ export default function ContentStrategyPage() {
       setError(e.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  // ─── Cancel ───────────────────────────────────────────────────────────────
+  const handleCancel = async (id: string) => {
+    setCancellingId(id)
+    try {
+      await apiFetch("/api/content-analysis", {
+        method: "PATCH",
+        body: JSON.stringify({ id, action: "cancel" }),
+      })
+      setHistory(prev => prev.map(j => j.id === id ? { ...j, status: "cancelled" as const } : j))
+    } catch {
+      // ignore
+    } finally {
+      setCancellingId(null)
+    }
+  }
+
+  // ─── Delete ───────────────────────────────────────────────────────────────
+  const handleDelete = async (id: string) => {
+    try {
+      await apiFetch(`/api/content-analysis?id=${encodeURIComponent(id)}`, { method: "DELETE" })
+      setHistory(prev => prev.filter(j => j.id !== id))
+      if (activeJobId === id) {
+        setResult(null)
+        setActiveJobId(null)
+      }
+    } catch {
+      // ignore
+    } finally {
+      setConfirmDeleteId(null)
     }
   }
 
@@ -233,7 +269,7 @@ export default function ContentStrategyPage() {
   const trendChartData = {
     labels: trendLabels,
     datasets: [{
-      label: "Engagement Rate",
+      label: t("analytics.engagementRate"),
       data: result?.trend_30d ?? [],
       borderColor: "#378ADD",
       backgroundColor: "rgba(55,138,221,0.07)",
@@ -264,7 +300,7 @@ export default function ContentStrategyPage() {
   const reachChartData = {
     labels: result?.platform_reach.map(p => p.platform) ?? [],
     datasets: [{
-      label: "Est. Reach",
+      label: t("analytics.estReachChart"),
       data: result?.platform_reach.map(p => parseInt(p.reach.replace(/[^0-9]/g, ""))) ?? [],
       backgroundColor: result?.platform_reach.map(p => p.color) ?? [],
       borderRadius: 4,
@@ -323,7 +359,7 @@ export default function ContentStrategyPage() {
 
   // Sentiment pie data
   const sentimentData = {
-    labels: ["Positive", "Neutral", "Negative"],
+    labels: [t("analytics.sentimentPositive"), t("analytics.sentimentNeutral"), t("analytics.sentimentNegative")],
     datasets: [
       {
         data: [result?.sentiment.positive ?? 0, result?.sentiment.neutral ?? 0, result?.sentiment.negative ?? 0],
@@ -341,10 +377,10 @@ export default function ContentStrategyPage() {
       <Card>
         <CardContent className="pt-5 pb-4">
           <div className="flex items-center justify-between mb-4">
-            <h1 className="text-base font-medium">Content Strategy AI</h1>
+            <h1 className="text-base font-medium">{t("analytics.title")}</h1>
             <span className="text-xs px-2.5 py-1 rounded-full font-medium"
               style={{ background: "#E6F1FB", color: "#185FA5" }}>
-              Powered by AI
+              {t("analytics.poweredBy")}
             </span>
           </div>
 
@@ -352,7 +388,7 @@ export default function ContentStrategyPage() {
           <textarea
             value={prompt}
             onChange={e => setPrompt(e.target.value)}
-            placeholder="Deskripsikan konten yang ingin kamu buat... contoh: 'launching produk skincare baru buat Gen Z, mau viral di TikTok, budget minim tapi kesan premium'"
+            placeholder={t("analytics.promptPlaceholder")}
             rows={3}
             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none mb-3"
           />
@@ -388,7 +424,7 @@ export default function ContentStrategyPage() {
               disabled={loading}
               className="ml-auto h-9 px-5 rounded-md bg-foreground text-background text-sm font-medium hover:opacity-85 disabled:opacity-50 transition-opacity"
             >
-              {loading ? "Generating..." : "Generate strategi →"}
+              {loading ? t("analytics.generating") : t("analytics.generateStrategy")}
             </button>
           </div>
 
@@ -401,7 +437,7 @@ export default function ContentStrategyPage() {
         <Card>
           <CardContent className="py-14 flex flex-col items-center gap-3">
             <div className="w-8 h-8 border-2 border-foreground border-t-transparent rounded-full animate-spin" />
-            <p className="text-sm text-muted-foreground">AI sedang menyusun strategi konten kamu...</p>
+            <p className="text-sm text-muted-foreground">{t("analytics.aiThinking")}</p>
           </CardContent>
         </Card>
       )}
@@ -411,9 +447,9 @@ export default function ContentStrategyPage() {
         <Card>
           <CardContent className="py-16 flex flex-col items-center gap-3 text-center">
             <div className="text-4xl">🚀</div>
-            <p className="font-medium">Belum ada strategi</p>
+            <p className="font-medium">{t("analytics.emptyTitle")}</p>
             <p className="text-sm text-muted-foreground max-w-sm">
-              Tulis deskripsi konten yang kamu inginkan, pilih platform dan audience, lalu biarkan AI menyusun strategi lengkap untukmu.
+              {t("analytics.emptyDesc")}
             </p>
           </CardContent>
         </Card>
@@ -440,18 +476,18 @@ export default function ContentStrategyPage() {
                   >
                     {result.viral_score}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">Viral score</p>
-                </div>
-              </div>
+                        <p className="text-xs text-muted-foreground mt-1">{t("analytics.viralScore")}</p>
+                      </div>
+                    </div>
 
-              {/* Hook */}
-              <div className="rounded-lg p-3 mb-3" style={{ background: "#E6F1FB" }}>
-                <p className="text-xs font-medium mb-1" style={{ color: "#185FA5" }}>Hook 3 detik pertama</p>
+                    {/* Hook */}
+                    <div className="rounded-lg p-3 mb-3" style={{ background: "#E6F1FB" }}>
+                      <p className="text-xs font-medium mb-1" style={{ color: "#185FA5" }}>{t("analytics.hookLabel")}</p>
                 <p className="text-sm" style={{ color: "#0C447C" }}>"{result.hook}"</p>
               </div>
 
               {/* Content flow */}
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Alur konten</p>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">{t("analytics.contentFlow")}</p>
               <div className="flex flex-wrap gap-2">
                 {result.content_flow.map((step, i) => (
                   <div key={i} className="flex items-center gap-1.5">
@@ -475,27 +511,27 @@ export default function ContentStrategyPage() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
               {
-                label: "Est. views",
+                label: t("analytics.estimatedViews"),
                 value: `${result.estimated_views.min}–${result.estimated_views.max}`,
-                sub: "estimasi jangkauan",
+                sub: t("analytics.estReach"),
                 subColor: "text-muted-foreground",
               },
               {
-                label: "Engagement rate",
+                label: t("analytics.engagementRate"),
                 value: `${result.engagement_rate}%`,
-                sub: result.engagement_rate >= 6 ? "Di atas rata-rata" : "Rata-rata industri",
+                sub: result.engagement_rate >= 6 ? t("analytics.aboveAverage") : t("analytics.industryAverage"),
                 subColor: result.engagement_rate >= 6 ? "text-green-600" : "text-amber-600",
               },
               {
-                label: "Best post time",
+                label: t("analytics.bestPostTime"),
                 value: result.best_post_time,
                 sub: result.best_post_days,
                 subColor: "text-muted-foreground",
               },
               {
-                label: "Caption score",
-                value: `${result.caption_score}/100`,
-                sub: result.caption_score >= 80 ? "Sangat baik" : result.caption_score >= 60 ? "Cukup baik" : "Perlu perbaikan",
+                label: t("analytics.captionScore"),
+                value: t("analytics.captionScoreValue", { score: result.caption_score }),
+                sub: result.caption_score >= 80 ? t("analytics.excellent") : result.caption_score >= 60 ? t("analytics.fair") : t("analytics.needsImprovement"),
                 subColor: result.caption_score >= 80 ? "text-green-600" : result.caption_score >= 60 ? "text-amber-600" : "text-red-600",
               },
             ].map(m => (
@@ -512,7 +548,7 @@ export default function ContentStrategyPage() {
             <Card>
               <CardContent className="pt-5">
                 <div className="flex items-center justify-between mb-3">
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Caption</p>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("analytics.caption")}</p>
                   <div className="flex items-center gap-2">
                     <span
                       className="text-xs px-2 py-0.5 rounded-full font-medium"
@@ -524,7 +560,7 @@ export default function ContentStrategyPage() {
                       onClick={copyCaption}
                       className="text-xs px-2.5 py-1 rounded-md border border-border hover:bg-muted transition-colors"
                     >
-                      {copiedCaption ? "✓ Copied" : "Copy"}
+                      {copiedCaption ? t("analytics.copied") : t("analytics.copy")}
                     </button>
                   </div>
                 </div>
@@ -534,7 +570,7 @@ export default function ContentStrategyPage() {
 
             <Card>
               <CardContent className="pt-5">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Hashtag</p>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">{t("analytics.hashtag")}</p>
                 <div className="flex flex-wrap gap-1.5 mb-3">
                   {result.hashtags.map(h => (
                     <span
@@ -553,7 +589,7 @@ export default function ContentStrategyPage() {
                 )}
 
                 <div className="mt-4">
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Format konten</p>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">{t("analytics.contentFormats")}</p>
                   <div className="flex flex-wrap gap-1.5">
                     {result.content_formats.map(f => (
                       <span
@@ -574,7 +610,7 @@ export default function ContentStrategyPage() {
           <Card>
             <CardContent className="pt-5">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-4">
-                Proyeksi engagement trend — 30 hari
+                {t("analytics.engagementTrend")}
               </p>
               <div style={{ height: 180 }}>
                 <Line data={trendChartData} options={trendChartOptions} />
@@ -586,14 +622,14 @@ export default function ContentStrategyPage() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Card className="sm:col-span-2">
               <CardContent className="pt-5">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-4">Diagram alur konten</p>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-4">{t("analytics.contentFlowDiagram")}</p>
                 <div className="rounded border border-border p-3 min-h-[140px] overflow-auto" ref={mermaidRef} />
               </CardContent>
             </Card>
 
             <Card>
               <CardContent className="pt-5">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Analisis sentimen</p>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">{t("analytics.sentimentAnalysis")}</p>
                 <div style={{ height: 150 }}>
                   <Pie data={sentimentData} options={{ plugins: { legend: { position: 'bottom' } }, maintainAspectRatio: false }} />
                 </div>
@@ -607,7 +643,7 @@ export default function ContentStrategyPage() {
             <Card>
               <CardContent className="pt-5">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-4">
-                  Audience match
+                  {t("analytics.audienceMatch")}
                 </p>
                 <div className="space-y-3">
                   {result.audience_match.map(a => (
@@ -631,7 +667,7 @@ export default function ContentStrategyPage() {
             <Card>
               <CardContent className="pt-5">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-4">
-                  Est. reach per platform
+                  {t("analytics.estReachPerPlatform")}
                 </p>
                 <div style={{ height: 130 }}>
                   <Bar data={reachChartData} options={reachChartOptions} />
@@ -644,7 +680,7 @@ export default function ContentStrategyPage() {
           <Card>
             <CardContent className="pt-5">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
-                Analisis sentimen konten
+                {t("analytics.sentimentAnalysis")}
               </p>
               <div className="flex rounded-lg overflow-hidden h-2.5 mb-3">
                 <div style={{ width: `${result.sentiment.positive}%`, background: "#639922" }} />
@@ -653,9 +689,9 @@ export default function ContentStrategyPage() {
               </div>
               <div className="flex gap-4 text-xs text-muted-foreground mb-3">
                 {[
-                  { label: `Positif ${result.sentiment.positive}%`, color: "#639922" },
-                  { label: `Netral ${result.sentiment.neutral}%`, color: "#EF9F27" },
-                  { label: `Negatif ${result.sentiment.negative}%`, color: "#E24B4A" },
+                  { label: t("analytics.positive", { pct: result.sentiment.positive }), color: "#639922" },
+                  { label: t("analytics.neutral", { pct: result.sentiment.neutral }), color: "#EF9F27" },
+                  { label: t("analytics.negative", { pct: result.sentiment.negative }), color: "#E24B4A" },
                 ].map(s => (
                   <span key={s.label} className="flex items-center gap-1">
                     <span className="w-2 h-2 rounded-sm inline-block" style={{ background: s.color }} />
@@ -671,11 +707,11 @@ export default function ContentStrategyPage() {
           <Card>
             <CardContent className="pt-5">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-4">
-                Rekomendasi strategi AI
+                {t("analytics.aiRecommendations")}
               </p>
               <div className="divide-y divide-border">
                 {result.recommendations.map((r, i) => {
-                  const pColor = priorityColor(r.priority)
+                  const pColor = priorityColor(r.priority, t)
                   return (
                     <div key={i} className="flex gap-3 py-3 first:pt-0 last:pb-0">
                       <div
@@ -708,7 +744,7 @@ export default function ContentStrategyPage() {
             <Card>
               <CardContent className="pt-5">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
-                  Variasi Call to Action
+                  {t("analytics.ctaVariations")}
                 </p>
                 <div className="space-y-2">
                   {result.cta_suggestions.map((cta, i) => (
@@ -726,7 +762,7 @@ export default function ContentStrategyPage() {
             <Card>
               <CardContent className="pt-5">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
-                  Insight kompetitor
+                  {t("analytics.competitorInsight")}
                 </p>
                 <p className="text-sm text-muted-foreground leading-relaxed">{result.competitor_insight}</p>
               </CardContent>
@@ -739,43 +775,83 @@ export default function ContentStrategyPage() {
       <Card>
         <CardContent className="pt-5">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
-            Riwayat strategi
+            {t("analytics.history")}
           </p>
           {historyLoading ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">Memuat riwayat...</p>
+            <p className="text-sm text-muted-foreground py-4 text-center">{t("analytics.loadingHistory")}</p>
           ) : history.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">Belum ada riwayat strategi.</p>
+            <p className="text-sm text-muted-foreground py-4 text-center">{t("analytics.noHistory")}</p>
           ) : (
             <div className="divide-y divide-border">
               {history.map(job => (
-                <button
+                <div
                   key={job.id}
-                  onClick={() => {
-                    setSelectedHistoryJob(job)
-                  }}
-                  disabled={job.status !== "completed"}
-                  className={`w-full flex items-center gap-3 py-3 text-left transition-colors rounded px-1 hover:bg-muted/30 disabled:opacity-60 disabled:cursor-default`}
+                  className="flex items-center gap-2 py-3 px-1 rounded transition-colors hover:bg-muted/30 group"
                 >
-                  <span className="text-lg">{platformIcon(job.platform)}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{job.prompt}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {job.platform} · {job.target_audience} · {timeAgo(job.created_at)}
-                    </p>
-                  </div>
-                  <span
-                    className="text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0"
-                    style={
-                      job.status === "completed"
-                        ? { background: "#EAF3DE", color: "#3B6D11" }
-                        : job.status === "processing"
-                        ? { background: "#FAEEDA", color: "#854F0B" }
-                        : { background: "#FCEBEB", color: "#A32D2D" }
-                    }
+                  <button
+                    onClick={() => { setSelectedHistoryJob(job) }}
+                    disabled={job.status !== "completed"}
+                    className="flex items-center gap-3 flex-1 min-w-0 text-left disabled:opacity-60 disabled:cursor-default"
                   >
-                    {job.status === "completed" ? "Selesai" : job.status === "processing" ? "Diproses..." : "Gagal"}
-                  </span>
-                </button>
+                    <span className="text-lg">{platformIcon(job.platform)}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{job.prompt}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {job.platform} · {job.target_audience} · {timeAgo(job.created_at, t)}
+                      </p>
+                    </div>
+                    <span
+                      className="text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0"
+                      style={
+                        job.status === "completed"
+                          ? { background: "#EAF3DE", color: "#3B6D11" }
+                          : job.status === "processing"
+                          ? { background: "#FAEEDA", color: "#854F0B" }
+                          : job.status === "cancelled"
+                          ? { background: "#E5E7EB", color: "#6B7280" }
+                          : { background: "#FCEBEB", color: "#A32D2D" }
+                      }
+                    >
+                      {job.status === "completed" ? t("analytics.completed") : job.status === "processing" ? t("analytics.processing") : job.status === "cancelled" ? "Cancelled" : t("analytics.failed")}
+                    </span>
+                  </button>
+
+                  {job.status === "processing" && (
+                    <button
+                      onClick={() => handleCancel(job.id)}
+                      disabled={cancellingId === job.id}
+                      className="text-xs px-2 py-1 rounded border border-border hover:bg-muted transition-colors flex-shrink-0 disabled:opacity-50"
+                      title="Cancel"
+                    >
+                      {cancellingId === job.id ? "..." : "⏹"}
+                    </button>
+                  )}
+
+                  {confirmDeleteId === job.id ? (
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button
+                        onClick={() => handleDelete(job.id)}
+                        className="text-xs px-2 py-1 rounded bg-destructive text-destructive-foreground hover:opacity-85 transition-opacity"
+                      >
+                        Hapus
+                      </button>
+                      <button
+                        onClick={() => setConfirmDeleteId(null)}
+                        className="text-xs px-2 py-1 rounded border border-border hover:bg-muted transition-colors"
+                      >
+                        Batal
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmDeleteId(job.id)}
+                      className="text-xs px-2 py-1 rounded border border-border hover:bg-muted transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
+                      title="Delete"
+                    >
+                      🗑
+                    </button>
+                  )}
+                </div>
               ))}
             </div>
           )}
@@ -786,8 +862,8 @@ export default function ContentStrategyPage() {
       <Dialog open={!!selectedHistoryJob} onOpenChange={(open) => !open && setSelectedHistoryJob(null)}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto w-full mx-auto bg-background p-0">
           <DialogHeader className="px-6 py-4 border-b border-border sticky top-0 bg-background z-10">
-            <DialogTitle>Detail Strategi Konten</DialogTitle>
-            <DialogDescription>Hasil generasi AI untuk prompt: {selectedHistoryJob?.prompt}</DialogDescription>
+            <DialogTitle>{t("analytics.detailTitle")}</DialogTitle>
+            <DialogDescription>{t("analytics.detailDesc", { prompt: selectedHistoryJob?.prompt })}</DialogDescription>
           </DialogHeader>
           <div className="p-6 space-y-5">
             {selectedHistoryJob?.result && (
@@ -810,18 +886,18 @@ export default function ContentStrategyPage() {
                         >
                           {selectedHistoryJob.result.viral_score}
                         </div>
-                        <p className="text-xs text-muted-foreground mt-1">Viral score</p>
+                  <p className="text-xs text-muted-foreground mt-1">{t("analytics.viralScore")}</p>
                       </div>
                     </div>
 
                     {/* Hook */}
                     <div className="rounded-lg p-3 mb-3" style={{ background: "#E6F1FB" }}>
-                      <p className="text-xs font-medium mb-1" style={{ color: "#185FA5" }}>Hook 3 detik pertama</p>
+                <p className="text-xs font-medium mb-1" style={{ color: "#185FA5" }}>{t("analytics.hookLabel")}</p>
                       <p className="text-sm" style={{ color: "#0C447C" }}>"{selectedHistoryJob.result.hook}"</p>
                     </div>
 
                     {/* Content flow */}
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Alur konten</p>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">{t("analytics.contentFlow")}</p>
                     <div className="flex flex-wrap gap-2">
                       {selectedHistoryJob.result.content_flow.map((step, i) => (
                         <div key={i} className="flex items-center gap-1.5">
@@ -845,27 +921,27 @@ export default function ContentStrategyPage() {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {[
                     {
-                      label: "Est. views",
+                      label: t("analytics.estimatedViews"),
                       value: `${selectedHistoryJob.result.estimated_views.min}–${selectedHistoryJob.result.estimated_views.max}`,
-                      sub: "estimasi jangkauan",
+                      sub: t("analytics.estReach"),
                       subColor: "text-muted-foreground",
                     },
                     {
-                      label: "Engagement rate",
+                      label: t("analytics.engagementRate"),
                       value: `${selectedHistoryJob.result.engagement_rate}%`,
-                      sub: selectedHistoryJob.result.engagement_rate >= 6 ? "Di atas rata-rata" : "Rata-rata industri",
+                      sub: selectedHistoryJob.result.engagement_rate >= 6 ? t("analytics.aboveAverage") : t("analytics.industryAverage"),
                       subColor: selectedHistoryJob.result.engagement_rate >= 6 ? "text-green-600" : "text-amber-600",
                     },
                     {
-                      label: "Best post time",
+                      label: t("analytics.bestPostTime"),
                       value: selectedHistoryJob.result.best_post_time,
                       sub: selectedHistoryJob.result.best_post_days,
                       subColor: "text-muted-foreground",
                     },
                     {
-                      label: "Caption score",
-                      value: `${selectedHistoryJob.result.caption_score}/100`,
-                      sub: selectedHistoryJob.result.caption_score >= 80 ? "Sangat baik" : selectedHistoryJob.result.caption_score >= 60 ? "Cukup baik" : "Perlu perbaikan",
+                      label: t("analytics.captionScore"),
+                      value: t("analytics.captionScoreValue", { score: selectedHistoryJob.result.caption_score }),
+                      sub: selectedHistoryJob.result.caption_score >= 80 ? t("analytics.excellent") : selectedHistoryJob.result.caption_score >= 60 ? t("analytics.fair") : t("analytics.needsImprovement"),
                       subColor: selectedHistoryJob.result.caption_score >= 80 ? "text-green-600" : selectedHistoryJob.result.caption_score >= 60 ? "text-amber-600" : "text-red-600",
                     },
                   ].map(m => (
@@ -882,7 +958,7 @@ export default function ContentStrategyPage() {
                   <Card>
                     <CardContent className="pt-5">
                       <div className="flex items-center justify-between mb-3">
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Caption</p>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("analytics.caption")}</p>
                         <div className="flex items-center gap-2">
                           <span
                             className="text-xs px-2 py-0.5 rounded-full font-medium"
@@ -894,7 +970,7 @@ export default function ContentStrategyPage() {
                             onClick={copyModalCaption}
                             className="text-xs px-2.5 py-1 rounded-md border border-border hover:bg-muted transition-colors"
                           >
-                            {modalCopiedCaption ? "✓ Copied" : "Copy"}
+                            {modalCopiedCaption ? t("analytics.copied") : t("analytics.copy")}
                           </button>
                         </div>
                       </div>
@@ -904,7 +980,7 @@ export default function ContentStrategyPage() {
 
                   <Card>
                     <CardContent className="pt-5">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Hashtag</p>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">{t("analytics.hashtag")}</p>
                       <div className="flex flex-wrap gap-1.5 mb-3">
                         {selectedHistoryJob.result.hashtags.map(h => (
                           <span
@@ -923,7 +999,7 @@ export default function ContentStrategyPage() {
                       )}
 
                       <div className="mt-4">
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Format konten</p>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">{t("analytics.contentFormats")}</p>
                         <div className="flex flex-wrap gap-1.5">
                           {selectedHistoryJob.result.content_formats.map(f => (
                             <span
@@ -944,13 +1020,13 @@ export default function ContentStrategyPage() {
                 <Card>
                   <CardContent className="pt-5">
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-4">
-                      Proyeksi engagement trend — 30 hari
+                      {t("analytics.engagementTrend")}
                     </p>
                     <div style={{ height: 180 }}>
                       <Line data={{
                         labels: trendLabels,
                         datasets: [{
-                          label: "Engagement Rate",
+      label: t("analytics.engagementRate"),
                           data: selectedHistoryJob.result.trend_30d ?? [],
                           borderColor: "#378ADD",
                           backgroundColor: "rgba(55,138,221,0.07)",
@@ -969,17 +1045,17 @@ export default function ContentStrategyPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <Card className="sm:col-span-2">
                     <CardContent className="pt-5">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-4">Diagram alur konten</p>
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-4">{t("analytics.contentFlowDiagram")}</p>
                       <div className="rounded border border-border p-3 min-h-[140px] overflow-auto" ref={modalMermaidRef} />
                     </CardContent>
                   </Card>
 
                   <Card>
                     <CardContent className="pt-5">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Analisis sentimen</p>
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">{t("analytics.sentimentAnalysis")}</p>
                       <div style={{ height: 150 }}>
                         <Pie data={{
-                          labels: ["Positive", "Neutral", "Negative"],
+                          labels: [t("analytics.sentimentPositive"), t("analytics.sentimentNeutral"), t("analytics.sentimentNegative")],
                           datasets: [
                             {
                               data: [selectedHistoryJob.result.sentiment.positive ?? 0, selectedHistoryJob.result.sentiment.neutral ?? 0, selectedHistoryJob.result.sentiment.negative ?? 0],
@@ -999,7 +1075,7 @@ export default function ContentStrategyPage() {
                   <Card>
                     <CardContent className="pt-5">
                       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-4">
-                        Audience match
+                        {t("analytics.audienceMatch")}
                       </p>
                       <div className="space-y-3">
                         {selectedHistoryJob.result.audience_match.map(a => (
@@ -1023,13 +1099,13 @@ export default function ContentStrategyPage() {
                   <Card>
                     <CardContent className="pt-5">
                       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-4">
-                        Est. reach per platform
+                        {t("analytics.estReachPerPlatform")}
                       </p>
                       <div style={{ height: 130 }}>
                         <Bar data={{
                           labels: selectedHistoryJob.result.platform_reach.map(p => p.platform) ?? [],
                           datasets: [{
-                            label: "Est. Reach",
+                            label: t("analytics.estReachChart"),
                             data: selectedHistoryJob.result.platform_reach.map(p => parseInt(p.reach.replace(/[^0-9]/g, ""))) ?? [],
                             backgroundColor: selectedHistoryJob.result.platform_reach.map(p => p.color) ?? [],
                             borderRadius: 4,
@@ -1044,7 +1120,7 @@ export default function ContentStrategyPage() {
                 <Card>
                   <CardContent className="pt-5">
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
-                      Analisis sentimen konten
+                      {t("analytics.sentimentAnalysis")}
                     </p>
                     <div className="flex rounded-lg overflow-hidden h-2.5 mb-3">
                       <div style={{ width: `${selectedHistoryJob.result.sentiment.positive}%`, background: "#639922" }} />
@@ -1053,9 +1129,9 @@ export default function ContentStrategyPage() {
                     </div>
                     <div className="flex gap-4 text-xs text-muted-foreground mb-3">
                       {[
-                        { label: `Positif ${selectedHistoryJob.result.sentiment.positive}%`, color: "#639922" },
-                        { label: `Netral ${selectedHistoryJob.result.sentiment.neutral}%`, color: "#EF9F27" },
-                        { label: `Negatif ${selectedHistoryJob.result.sentiment.negative}%`, color: "#E24B4A" },
+                        { label: t("analytics.positive", { pct: selectedHistoryJob.result.sentiment.positive }), color: "#639922" },
+                        { label: t("analytics.neutral", { pct: selectedHistoryJob.result.sentiment.neutral }), color: "#EF9F27" },
+                        { label: t("analytics.negative", { pct: selectedHistoryJob.result.sentiment.negative }), color: "#E24B4A" },
                       ].map(s => (
                         <span key={s.label} className="flex items-center gap-1">
                           <span className="w-2 h-2 rounded-sm inline-block" style={{ background: s.color }} />
@@ -1071,11 +1147,11 @@ export default function ContentStrategyPage() {
                 <Card>
                   <CardContent className="pt-5">
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-4">
-                      Rekomendasi strategi AI
+                      {t("analytics.aiRecommendations")}
                     </p>
                     <div className="divide-y divide-border">
                       {selectedHistoryJob.result.recommendations.map((r, i) => {
-                        const pColor = priorityColor(r.priority)
+                        const pColor = priorityColor(r.priority, t)
                         return (
                           <div key={i} className="flex gap-3 py-3 first:pt-0 last:pb-0">
                             <div
@@ -1108,7 +1184,7 @@ export default function ContentStrategyPage() {
                   <Card>
                     <CardContent className="pt-5">
                       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
-                        Variasi Call to Action
+                        {t("analytics.ctaVariations")}
                       </p>
                       <div className="space-y-2">
                         {selectedHistoryJob.result.cta_suggestions.map((cta, i) => (
@@ -1126,7 +1202,7 @@ export default function ContentStrategyPage() {
                   <Card>
                     <CardContent className="pt-5">
                       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
-                        Insight kompetitor
+                        {t("analytics.competitorInsight")}
                       </p>
                       <p className="text-sm text-muted-foreground leading-relaxed">{selectedHistoryJob.result.competitor_insight}</p>
                     </CardContent>

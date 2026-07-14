@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { CONTENT_STRATEGY_SYSTEM_PROMPT, buildUserPrompt } from "./prompts"
 import { getUserFromRequest } from "@/middleware/auth"
-import { insert, find } from "@/lib/supabase"
+import { find } from "@/lib/supabase"
 import { logAiUsage } from "@/lib/log"
 
 
@@ -41,7 +41,7 @@ export type StrategyJob = {
 	prompt: string
 	platform: string
 	target_audience: string
-	status: "completed" | "processing" | "failed"
+	status: "completed" | "processing" | "failed" | "cancelled"
 	created_at: string
 	result: StrategyResult | null
 	error?: string
@@ -95,6 +95,56 @@ async function updatePersistedJob(jobId: string, userId: string, updates: Partia
 		console.error('[content-analysis] failed to update:', e.message, e)
 		const existing = getFallbackJobs(userId).get(jobId)
 		if (existing) getFallbackJobs(userId).set(jobId, { ...existing, ...updates })
+	}
+}
+
+// ── Sync to generated_contents (unified admin pipeline) ───────────────────────
+async function syncToGeneratedContents(
+	job: StrategyJob,
+	userId: string,
+	meta?: { platform?: string; target_audience?: string; content_type?: string }
+) {
+	try {
+		const { getSupabaseAdmin: getAdmin } = await import('@/lib/supabase')
+		const supabase = await getAdmin()
+
+		// Reuse existing record UUID if one already exists for this strategy job
+		const { data: existing } = await supabase
+			.from('generated_contents')
+			.select('id')
+			.eq('metadata->>strategy_job_id', job.id)
+			.maybeSingle()
+
+		const recordId = existing?.id || crypto.randomUUID()
+
+		const payload: any = {
+			id: recordId,
+			user_id: userId,
+			title: job.result?.concept_title || job.prompt.slice(0, 100),
+			content: job.result ? JSON.stringify(job.result) : job.prompt,
+			metadata: {
+				strategy_job_id: job.id,
+				content_type: 'strategy',
+				status: job.status,
+				prompt: job.prompt,
+				platform: meta?.platform || '',
+				target_audience: meta?.target_audience || '',
+				content_type_audience: meta?.content_type || '',
+				analysis_result: job.result,
+				error: job.error || null,
+			},
+			created_at: job.created_at,
+			updated_at: new Date().toISOString(),
+		}
+
+		const { error } = await supabase.from('generated_contents').upsert(payload, { onConflict: 'id' })
+		if (error) {
+			console.error('[content-analysis] failed to sync to generated_contents:', error.message)
+		} else {
+			console.log('[content-analysis] synced to generated_contents:', recordId, 'status:', job.status)
+		}
+	} catch (e: any) {
+		console.error('[content-analysis] failed to sync to generated_contents:', e.message)
 	}
 }
 
@@ -419,25 +469,47 @@ export async function POST(req: NextRequest) {
 		})
 
 		const apiUrl = (process.env.CONTENT_API_URL || 'https://openrouter.ai/api/v1').replace(/\/+$/, '')
-		const aiResponse = await fetch(`${apiUrl}/chat/completions`, {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				Authorization: `Bearer ${process.env.CONTENT_API_KEY || ''}`,
-			},
-			body: JSON.stringify({
-				model: process.env.CONTENT_MODEL || 'google/gemini-2.5-flash',
-				max_tokens: 4096,
-				temperature: 0.7,
-				response_format: { type: 'json_object' },
-				system: CONTENT_STRATEGY_SYSTEM_PROMPT,
-				messages: [{ role: 'user', content: userMessage }],
-			}),
-		})
+		const providerModel = process.env.CONTENT_MODEL || 'google/gemini-2.5-flash'
+
+		const controller = new AbortController()
+		const TIMEOUT_MS = 55_000
+		const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS)
+
+		const requestStart = performance.now()
+
+		let aiResponse: Response
+		try {
+			aiResponse = await fetch(`${apiUrl}/chat/completions`, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					Authorization: `Bearer ${process.env.CONTENT_API_KEY || ''}`,
+				},
+				body: JSON.stringify({
+					model: providerModel,
+					max_tokens: 4096,
+					temperature: 0.7,
+					response_format: { type: 'json_object' },
+					system: CONTENT_STRATEGY_SYSTEM_PROMPT,
+					messages: [{ role: 'user', content: userMessage }],
+				}),
+				signal: controller.signal,
+			})
+		} finally {
+			clearTimeout(timeoutId)
+		}
+
+		const requestDuration = Math.round(performance.now() - requestStart)
+		console.log(`[content-analysis] Provider responded in ${requestDuration}ms with status ${aiResponse.status}`)
 
 		if (!aiResponse.ok) {
-			const errText = await aiResponse.text()
-			throw new Error(`AI API error: ${aiResponse.status} — ${errText}`)
+			const errBody = await aiResponse.text()
+			const isHtml = /^\s*<(?:!doctype\s+)?html/i.test(errBody) || errBody.includes('cloudflare')
+			const sanitizedError = isHtml
+				? `Provider returned non-JSON error (HTTP ${aiResponse.status})`
+				: errBody.slice(0, 2000)
+			console.error(`[content-analysis] Provider error ${aiResponse.status} (${requestDuration}ms):`, isHtml ? '[HTML response suppressed]' : sanitizedError)
+			throw new Error(`AI API error: ${aiResponse.status} — ${sanitizedError}`)
 		}
 
 		const aiData = await aiResponse.json()
@@ -483,10 +555,110 @@ export async function POST(req: NextRequest) {
 		// Update persisted job with result using upsert
 		await persistJob(job, user.id, target_audience, content_type)
 
+		// Sync to admin content management pipeline
+		syncToGeneratedContents(job, user.id, { platform, target_audience, content_type }).catch(() => {})
+
 		return NextResponse.json({ job }, { status: 201 })
 	} catch (err: any) {
 		console.error('[content-analysis POST]', err)
-		return NextResponse.json({ error: err.message ?? 'Terjadi kesalahan internal' }, { status: 500 })
+
+		job.status = 'failed'
+		job.error = err.message ?? 'Unknown error'
+		await updatePersistedJob(job.id, user.id, { status: 'failed' }).catch(() => {})
+		syncToGeneratedContents(job, user.id, { platform, target_audience, content_type }).catch(() => {})
+
+		if (err.name === 'AbortError') {
+			return NextResponse.json(
+				{ job, error: 'Permintaan ke provider AI terlalu lama. Silakan coba lagi.' },
+				{ status: 504 }
+			)
+		}
+
+		let message = err.message ?? 'Terjadi kesalahan internal'
+		if (/^\s*</.test(message) || message.includes('cloudflare')) {
+			message = 'Provider AI mengembalikan error yang tidak terduga. Silakan coba lagi.'
+		}
+
+		return NextResponse.json({ job, error: message }, { status: 500 })
+	}
+}
+
+// ── Cancel a processing job ────────────────────────────────────────────────────
+export async function PATCH(req: NextRequest) {
+	const user = getUserFromRequest(req)
+	if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+	try {
+		const { id, action } = await req.json()
+		if (!id || action !== 'cancel') {
+			return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
+		}
+
+		await updatePersistedJob(id, user.id, { status: 'cancelled' })
+		getFallbackJobs(user.id).delete(id)
+
+		try {
+			const { getSupabaseAdmin } = await import('@/lib/supabase')
+			const supabase = await getSupabaseAdmin()
+			const { data: rec } = await supabase
+				.from('generated_contents')
+				.select('id, metadata')
+				.eq('metadata->>strategy_job_id', id)
+				.maybeSingle()
+			if (rec) {
+				const mergedMeta = { ...(rec.metadata || {}), status: 'cancelled' }
+				await supabase
+					.from('generated_contents')
+					.update({ metadata: mergedMeta, updated_at: new Date().toISOString() })
+					.eq('id', rec.id)
+			}
+		} catch {} // ignore
+
+		return NextResponse.json({ success: true })
+	} catch (err: any) {
+		console.error('[content-analysis PATCH]', err)
+		return NextResponse.json({ error: err.message }, { status: 500 })
+	}
+}
+
+// ── Delete a strategy record ───────────────────────────────────────────────────
+export async function DELETE(req: NextRequest) {
+	const user = getUserFromRequest(req)
+	if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+	try {
+		const { searchParams } = new URL(req.url)
+		const id = searchParams.get('id')
+		if (!id) {
+			return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+		}
+
+		const { deleteOne } = await import('@/lib/supabase')
+		try {
+			await deleteOne('content_analysis', { id, user_id: user.id })
+		} catch {
+			// Table may not exist — ignore
+		}
+		try {
+			const { getSupabaseAdmin } = await import('@/lib/supabase')
+			const supabase = await getSupabaseAdmin()
+			const { data: rec } = await supabase
+				.from('generated_contents')
+				.select('id')
+				.eq('metadata->>strategy_job_id', id)
+				.maybeSingle()
+			if (rec) {
+				await supabase.from('generated_contents').delete().eq('id', rec.id)
+			}
+		} catch {
+			// Table may not exist — ignore
+		}
+		getFallbackJobs(user.id).delete(id)
+
+		return NextResponse.json({ success: true })
+	} catch (err: any) {
+		console.error('[content-analysis DELETE]', err)
+		return NextResponse.json({ error: err.message }, { status: 500 })
 	}
 }
 
@@ -495,6 +667,21 @@ export async function GET(req: NextRequest) {
 	if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
 	try {
+		// Auto-clean stale processing jobs for this user
+		try {
+			const { getSupabaseAdmin } = await import('@/lib/supabase')
+			const cutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString()
+			const supabase = await getSupabaseAdmin()
+			await supabase
+				.from('content_analysis')
+				.update({ status: 'failed', updated_at: new Date().toISOString() })
+				.eq('user_id', user.id)
+				.eq('status', 'processing')
+				.lt('created_at', cutoff)
+		} catch {
+			// Non-critical cleanup failure
+		}
+
 		const jobs = await loadJobs(user.id)
 		return NextResponse.json({ jobs })
 	} catch (err: any) {

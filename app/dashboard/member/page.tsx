@@ -185,7 +185,7 @@ export default function MemberPage() {
       window.location.href = data.invoiceUrl
     } catch (err: any) {
       console.error("[handleBuy]", err)
-      setErrorMsg(err.message ?? "Gagal membuat invoice. Coba lagi.")
+      setErrorMsg(err.message ?? t("member.createInvoiceFailed"))
     } finally {
       setBuyingId(null)
     }
@@ -207,26 +207,26 @@ export default function MemberPage() {
           fetchTransactions()
         }
       } else if (data.status === "success") {
-        setErrorMsg("Pembayaran sudah selesai.")
+        setErrorMsg(t("member.paymentAlreadyComplete"))
         fetchTransactions()
       } else if (data.status === "expired" || data.status === "failed") {
-        setErrorMsg(data.message ?? "Invoice tidak dapat digunakan.")
+        setErrorMsg(data.message ?? t("member.invoiceUnavailable"))
         fetchTransactions()
       } else {
-        setErrorMsg(data.message ?? "Gagal membuka invoice.")
+        setErrorMsg(data.message ?? t("member.openInvoiceFailed"))
       }
     } catch (err: any) {
       console.error("[handleOpenInvoice]", err)
-      setErrorMsg(err.message ?? "Gagal membuka invoice.")
+      setErrorMsg(err.message ?? t("member.openInvoiceFailed"))
     }
   }
 
   // ── Status helpers ──────────────────────────────────────────────────────────
   const statusLabel: Record<TransactionStatus, string> = {
-    success: "Berhasil",
-    pending: "Menunggu Pembayaran",
-    failed: "Gagal",
-    expired: "Kedaluwarsa",
+    success: t("member.success"),
+    pending: t("member.pending"),
+    failed: t("member.failed"),
+    expired: t("member.expired"),
   }
 
   const statusVariant: Record<
@@ -276,15 +276,15 @@ export default function MemberPage() {
 
               <div className="space-y-1">
                 <p className="text-xs uppercase tracking-[0.2em] text-emerald-600 font-medium">
-                  {t('Paket Token')}
+                  {t('member.welcomeModalTitle')}
                 </p>
                 <h2 className="text-2xl font-bold text-gray-900">
-                  {t('Paket token untuk semua kebutuhan Anda')}
+                  {t('member.welcomeModalHeading')}
                 </h2>
               </div>
 
               <p className="text-sm text-gray-500 leading-relaxed">
-                {t('Dengan paket token kami, Anda mendapatkan akses instan ke berbagai fitur premium. Token dapat digunakan untuk meningkatkan pengalaman Anda, membuka fitur eksklusif, dan mendapatkan dukungan prioritas. Pilih paket yang sesuai dengan kebutuhan Anda dan nikmati manfaatnya sekarang!')}
+                {t('member.welcomeModalBody')}
               </p>
 
               <div className="flex items-start gap-3 rounded-2xl bg-emerald-50 border border-emerald-100 px-4 py-3">
@@ -369,7 +369,7 @@ export default function MemberPage() {
                     ?.scrollIntoView({ behavior: "smooth" })
                 }
               >
-                Top Up Sekarang
+                {t("member.topUpNow")}
               </Button>
               <Button
                 variant="ghost"
@@ -380,7 +380,7 @@ export default function MemberPage() {
                     ?.scrollIntoView({ behavior: "smooth" })
                 }
               >
-                Lihat Riwayat
+                {t("member.viewHistory")}
               </Button>
             </div>
           </CardContent>
@@ -397,7 +397,7 @@ export default function MemberPage() {
             onClick={() => setErrorMsg(null)}
             className="text-destructive/70 hover:text-destructive font-medium"
           >
-            Tutup
+            {t("member.close")}
           </button>
         </div>
       )}
@@ -443,7 +443,7 @@ export default function MemberPage() {
                 <div className="flex items-end justify-between gap-4">
                   <div>
                     <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                      Harga
+                      {t("member.packagePrice")}
                     </p>
                     <p className="text-3xl font-bold text-foreground">
                       {option.price}
@@ -474,7 +474,7 @@ export default function MemberPage() {
                             d="M4 12a8 8 0 018-8v4l3-3-3-3V4a10 10 0 100 10h-4a6 6 0 01-6-6z"
                           />
                         </svg>
-                        Memproses…
+                        {t("member.processing")}
                       </span>
                     ) : (
                       t("member.buy")
@@ -502,7 +502,7 @@ export default function MemberPage() {
           <Card className="border border-dashed border-border p-8 text-center">
             <CardContent>
               <p className="text-sm text-muted-foreground">
-                Memuat riwayat transaksi…
+                {t("member.loadingTransactions")}
               </p>
             </CardContent>
           </Card>
@@ -510,10 +510,10 @@ export default function MemberPage() {
           <Card className="rounded-3xl border border-dashed border-border p-8 text-center">
             <CardContent className="space-y-4">
               <p className="text-lg font-semibold text-foreground">
-                Belum ada transaksi.
+                {t("member.noTransactions")}
               </p>
               <p className="text-sm text-muted-foreground">
-                Riwayat transaksi akan muncul setelah Anda melakukan pembayaran.
+                {t("member.emptyTransactionsDescription")}
               </p>
             </CardContent>
           </Card>
@@ -532,7 +532,7 @@ export default function MemberPage() {
                         })}
                       </span>
                       <span>·</span>
-                      <span>Order ID: {tx.orderId}</span>
+                      <span>{t("member.orderId", { id: tx.orderId })}</span>
                     </div>
 
                     <div className="grid gap-2 sm:grid-cols-2">
@@ -569,7 +569,7 @@ export default function MemberPage() {
 
                     {tx.paidAt && (
                       <p className="text-xs text-muted-foreground">
-                        Dibayar:{" "}
+                        {t("member.dibayar")}
                         {new Date(tx.paidAt).toLocaleString("id-ID", {
                           day: "2-digit",
                           month: "short",
@@ -584,21 +584,23 @@ export default function MemberPage() {
                   <div className="flex flex-col items-end justify-between gap-3 min-w-[140px]">
                     {tx.status === "pending" && (
                       <Button size="sm" onClick={() => handleOpenInvoice(tx.orderId)}>
-                        Bayar Sekarang
+                        {t("member.payNow")}
                       </Button>
                     )}
                     {tx.status === "expired" && (
                       <div className="text-right space-y-1">
                         <p className="text-xs text-muted-foreground">
-                          Invoice kedaluwarsa pada{" "}
                           {tx.createdAt
-                            ? new Date(tx.createdAt).toLocaleDateString("id-ID", {
-                                day: "2-digit",
-                                month: "short",
-                                year: "numeric",
+                            ? t("member.invoiceExpiredOn", {
+                                date: new Date(tx.createdAt).toLocaleDateString("id-ID", {
+                                  day: "2-digit",
+                                  month: "short",
+                                  year: "numeric",
+                                }),
                               })
-                            : "tanggal tidak diketahui"}
-                          .
+                            : t("member.invoiceExpiredOn", {
+                                date: t("member.unknownDate"),
+                              })}
                         </p>
                         <Button
                           size="sm"
@@ -610,21 +612,21 @@ export default function MemberPage() {
                             if (pkg) handleBuy(pkg)
                           }}
                         >
-                          Buat Invoice Baru
+                          {t("member.createNewInvoice")}
                         </Button>
                       </div>
                     )}
                     {tx.status === "failed" && (
                       <div className="text-right text-sm text-muted-foreground space-y-1">
-                        <p>Hubungi admin:</p>
+                        <p>{t("member.contactAdmin")}</p>
                         <p className="font-semibold text-foreground">
-                          0819-9990-0900
+                          {t("member.contactPhone")}
                         </p>
                       </div>
                     )}
                     {tx.status === "success" && (
                       <p className="text-sm text-muted-foreground text-right">
-                        Pembayaran selesai ✓
+                        {t("member.paymentComplete")}
                       </p>
                     )}
                   </div>

@@ -16,18 +16,17 @@ import {
 } from "@/components/ui/dialog"
 import { AlertTriangle, Info } from "lucide-react"
 
-const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
-  success: { label: "LUNAS", variant: "default" },
-  paid: { label: "LUNAS", variant: "default" },
-  pending: { label: "Menunggu Pembayaran", variant: "secondary" },
-  failed: { label: "GAGAL", variant: "destructive" },
-  expired: { label: "KEDALUWARSA", variant: "outline" },
-}
-
 export default function MemberInvoiceDetailPage() {
   const { orderId } = useParams<{ orderId: string }>()
   const router = useRouter()
   const { t } = useLanguage()
+  const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
+    success: { label: t("invoice.lunas"), variant: "default" },
+    paid: { label: t("invoice.lunas"), variant: "default" },
+    pending: { label: t("invoice.menunggu"), variant: "secondary" },
+    failed: { label: t("invoice.gagal"), variant: "destructive" },
+    expired: { label: t("invoice.kedaluwarsa"), variant: "outline" },
+  }
   const [invoice, setInvoice] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
@@ -46,7 +45,7 @@ export default function MemberInvoiceDetailPage() {
           headers: { Authorization: `Bearer ${token}` },
         })
         const data = await res.json()
-        if (!res.ok) throw new Error(data.error || "Gagal memuat invoice")
+        if (!res.ok) throw new Error(data.error || t("invoice.notFound"))
         setInvoice(data.invoice)
       } catch (err: any) {
         setError(err.message)
@@ -71,7 +70,7 @@ export default function MemberInvoiceDetailPage() {
       const data = await res.json()
       
       if (!res.ok) {
-        throw new Error(data.error || "Gagal membuat invoice baru")
+        throw new Error(data.error || t("invoice.newInvoiceFailed"))
       }
       
       setShowExpiredModal(false)
@@ -79,22 +78,22 @@ export default function MemberInvoiceDetailPage() {
     } catch (err: any) {
       setIsRenewing(false)
       setShowExpiredModal(false)
-      setErrorMessage(err.message || "Gagal membuat invoice baru. Silakan coba lagi.")
+      setErrorMessage(err.message || t("invoice.newInvoiceFailed"))
       setShowErrorModal(true)
     }
   }
 
   if (loading) return (
     <div className="flex items-center justify-center min-h-[60vh]">
-      <p className="text-muted-foreground">Memuat invoice…</p>
+      <p className="text-muted-foreground">{t("invoice.loading")}</p>
     </div>
   )
 
   if (error || !invoice) return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-      <p className="text-destructive font-semibold">{error || "Invoice tidak ditemukan"}</p>
+      <p className="text-destructive font-semibold">{error || t("invoice.notFound")}</p>
       <Button variant="outline" onClick={() => router.push("/dashboard/member")}>
-        Kembali ke Dashboard
+        {t("invoice.backToDashboard")}
       </Button>
     </div>
   )
@@ -104,14 +103,14 @@ export default function MemberInvoiceDetailPage() {
   return (
     <div className="max-w-2xl mx-auto py-8 px-4 space-y-6">
       <Button variant="ghost" onClick={() => router.push("/dashboard/member")} className="-ml-2">
-        ← Kembali
+        {t("invoice.back")}
       </Button>
 
       <Card>
         <CardContent className="pt-6 space-y-6">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-xl font-bold">Invoice</h1>
+              <h1 className="text-xl font-bold">{t("invoice.title")}</h1>
               <p className="text-sm text-muted-foreground font-mono mt-1">{invoice.invoiceNumber}</p>
             </div>
             <Badge variant={conf.variant} className="text-sm px-3 py-1">
@@ -122,25 +121,25 @@ export default function MemberInvoiceDetailPage() {
           <div className="border-t pt-4 space-y-3">
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
-                <p className="text-muted-foreground">Paket</p>
+                <p className="text-muted-foreground">{t("invoice.package")}</p>
                 <p className="font-medium">{invoice.packageTitle || "-"}</p>
               </div>
               <div>
-                <p className="text-muted-foreground">Token</p>
+                <p className="text-muted-foreground">{t("invoice.token")}</p>
                 <p className="font-medium">{invoice.coins ?? 0}</p>
               </div>
               <div>
-                <p className="text-muted-foreground">Total</p>
+                <p className="text-muted-foreground">{t("invoice.total")}</p>
                 <p className="font-semibold text-lg">
                   Rp {Number(invoice.amount || 0).toLocaleString("id-ID")}
                 </p>
               </div>
               <div>
-                <p className="text-muted-foreground">Status</p>
+                <p className="text-muted-foreground">{t("invoice.status")}</p>
                 <p className="font-medium">{conf.label}</p>
               </div>
               <div>
-                <p className="text-muted-foreground">Dibuat</p>
+                <p className="text-muted-foreground">{t("invoice.created")}</p>
                 <p className="font-medium">
                   {invoice.createdAt
                     ? new Date(invoice.createdAt).toLocaleDateString("id-ID", {
@@ -151,7 +150,7 @@ export default function MemberInvoiceDetailPage() {
               </div>
               {invoice.paidAt && (
                 <div>
-                  <p className="text-muted-foreground">Dibayar</p>
+                  <p className="text-muted-foreground">{t("invoice.paid")}</p>
                   <p className="font-medium">
                     {new Date(invoice.paidAt).toLocaleDateString("id-ID", {
                       day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
@@ -166,19 +165,19 @@ export default function MemberInvoiceDetailPage() {
             {invoice.status === "pending" && invoice.invoiceUrl && (
               <Button asChild>
                 <a href={invoice.invoiceUrl} target="_blank" rel="noopener noreferrer">
-                  Bayar Sekarang
+                  {t("member.payNow")}
                 </a>
               </Button>
             )}
             {invoice.status === "expired" && (
               <Button size="sm" variant="outline" onClick={() => setShowExpiredModal(true)}>
-                Buat Invoice Baru
+                {t("invoice.createNew")}
               </Button>
             )}
             {(invoice.status === "success" || invoice.status === "paid") && (
               <Button variant="outline" asChild>
                 <a href={`/api/member/invoice/${orderId}/pdf`} target="_blank" rel="noopener noreferrer">
-                  Download PDF
+                  {t("invoice.downloadPdf")}
                 </a>
               </Button>
             )}
@@ -194,19 +193,18 @@ export default function MemberInvoiceDetailPage() {
               <div className="p-2 bg-amber-100 rounded-full">
                 <AlertTriangle className="h-5 w-5 text-amber-600" />
               </div>
-              <DialogTitle>Invoice Kedaluwarsa</DialogTitle>
+              <DialogTitle>{t("invoice.expiredTitle")}</DialogTitle>
             </div>
             <DialogDescription className="pt-2">
-              Invoice pembayaran ini telah kedaluwarsa dan tidak dapat digunakan lagi.
-              Apakah Anda ingin membuat invoice baru dengan paket yang sama?
+              {t("invoice.expiredDescription")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowExpiredModal(false)} disabled={isRenewing}>
-              Batal
+              {t("invoice.cancel")}
             </Button>
             <Button onClick={handleRenewInvoice} disabled={isRenewing}>
-              {isRenewing ? "Memproses..." : "Buat Invoice Baru"}
+              {isRenewing ? t("invoice.processing") : t("invoice.createNew")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -220,7 +218,7 @@ export default function MemberInvoiceDetailPage() {
               <div className="p-2 bg-red-100 rounded-full">
                 <AlertTriangle className="h-5 w-5 text-red-600" />
               </div>
-              <DialogTitle>Gagal</DialogTitle>
+              <DialogTitle>{t("invoice.failedTitle")}</DialogTitle>
             </div>
             <DialogDescription className="pt-2">
               {errorMessage}
@@ -228,7 +226,7 @@ export default function MemberInvoiceDetailPage() {
           </DialogHeader>
           <DialogFooter>
             <Button onClick={() => setShowErrorModal(false)}>
-              Tutup
+              {t("member.close")}
             </Button>
           </DialogFooter>
         </DialogContent>

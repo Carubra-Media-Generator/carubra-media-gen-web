@@ -74,6 +74,7 @@ function DetailModal({
   onRegenCaption, onRegenVideo,
   connectedSocmed, isRegenerating, isCaptioning,
 }: DetailModalProps) {
+  const { t } = useLanguage()
   const [editTitle, setEditTitle] = useState("")
   const [editScript, setEditScript] = useState("")
   const [editCaption, setEditCaption] = useState("")
@@ -111,8 +112,8 @@ function DetailModal({
 
   const formatTime = (seconds: number | null) => {
     if (seconds === null) return "—"
-    if (seconds < 60) return `${seconds} detik`
-    return `${Math.floor(seconds / 60)} menit`
+    if (seconds < 60) return t("videoAi.seconds", { s: seconds })
+    return t("videoAi.minutes", { m: Math.floor(seconds / 60) })
   }
 
   return (
@@ -130,7 +131,7 @@ function DetailModal({
               {item.status === "completed" && <CheckCircle2 className="h-3 w-3" />}
               {item.status === "failed" && <XCircle className="h-3 w-3" />}
               {item.status === "generating" && <Loader2 className="h-3 w-3 animate-spin" />}
-              {item.status === "completed" ? "Selesai" : item.status === "failed" ? "Gagal" : "Proses..."}
+              {item.status === "completed" ? t("videoAi.completed") : item.status === "failed" ? t("videoAi.failed") : t("videoAi.processing")}
             </Badge>
           </div>
         </div>
@@ -161,20 +162,20 @@ function DetailModal({
             ) : item.status === "generating" ? (
               <div className="flex flex-col items-center gap-3 text-muted-foreground">
                 <Loader2 className="h-10 w-10 animate-spin text-primary" />
-                <p className="text-sm">Membuat video...</p>
+                <p className="text-sm">{t("videoAi.generatingVideo")}</p>
               </div>
             ) : item.status === "completed" ? (
               <div className="flex flex-col items-center gap-3 text-muted-foreground">
                 <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center">
                   <Video className="h-8 w-8 text-primary" />
                 </div>
-                <p className="text-sm text-center">Video berhasil dibuat</p>
-                <p className="text-xs opacity-60 text-center">Preview tidak tersedia</p>
+                <p className="text-sm text-center">{t("videoAi.videoCreated")}</p>
+                <p className="text-xs opacity-60 text-center">{t("videoAi.previewUnavailable")}</p>
               </div>
             ) : (
               <div className="flex flex-col items-center gap-2 text-muted-foreground">
                 <XCircle className="h-10 w-10 opacity-30" />
-                <p className="text-sm">Video gagal dibuat</p>
+                <p className="text-sm">{t("videoAi.videoFailed")}</p>
               </div>
             )}
           </div>
@@ -186,13 +187,13 @@ function DetailModal({
                 className={cn("flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-all",
                   activeTab === "view" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
                 )}>
-                <Eye className="h-3.5 w-3.5 inline mr-1.5" />Detail
+                <Eye className="h-3.5 w-3.5 inline mr-1.5" />{t("videoAi.detail")}
               </button>
               <button onClick={() => setActiveTab("edit")}
                 className={cn("flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-all",
                   activeTab === "edit" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
                 )}>
-                <Edit2 className="h-3.5 w-3.5 inline mr-1.5" />Edit
+                <Edit2 className="h-3.5 w-3.5 inline mr-1.5" />{t("videoAi.edit")}
               </button>
             </div>
 
@@ -200,48 +201,48 @@ function DetailModal({
               <div className="flex flex-col gap-4 flex-1">
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="rounded-lg bg-muted/50 px-3 py-2">
-                    <p className="text-muted-foreground mb-0.5">Model</p>
-                    <p className="font-medium">{item.model === "text-to-video" ? "Text→Video" : "Image→Video"}</p>
+                    <p className="text-muted-foreground mb-0.5">{t("videoAi.modalModel")}</p>
+                    <p className="font-medium">{item.model === "text-to-video" ? t("videoAi.textToVideo") : t("videoAi.imageToVideo")}</p>
                   </div>
                   <div className="rounded-lg bg-muted/50 px-3 py-2">
-                    <p className="text-muted-foreground mb-0.5">Resolusi</p>
+                    <p className="text-muted-foreground mb-0.5">{t("videoAi.modalResolution")}</p>
                     <p className="font-medium">{item.resolution} · {item.ratio}</p>
                   </div>
                   <div className="rounded-lg bg-muted/50 px-3 py-2">
-                    <p className="text-muted-foreground mb-0.5">Durasi Video</p>
-                    <p className="font-medium">{item.duration} detik</p>
+                    <p className="text-muted-foreground mb-0.5">{t("videoAi.modalDuration")}</p>
+                    <p className="font-medium">{t("videoAi.modalDurationValue", { duration: item.duration })}</p>
                   </div>
                   <div className="rounded-lg bg-muted/50 px-3 py-2">
-                    <p className="text-muted-foreground mb-0.5">Waktu Generate</p>
+                    <p className="text-muted-foreground mb-0.5">{t("videoAi.modalGenerateTime")}</p>
                     <p className="font-medium">{formatTime(item.completedTime)}</p>
                   </div>
                   <div className="rounded-lg bg-muted/50 px-3 py-2">
-                    <p className="text-muted-foreground mb-0.5">Biaya</p>
-                    <p className="font-medium">{item.coinCost} koin</p>
+                    <p className="text-muted-foreground mb-0.5">{t("videoAi.modalCost")}</p>
+                    <p className="font-medium">{item.coinCost} {t("header.coins")}</p>
                   </div>
                   <div className="rounded-lg bg-muted/50 px-3 py-2">
-                    <p className="text-muted-foreground mb-0.5">Dibuat</p>
+                    <p className="text-muted-foreground mb-0.5">{t("videoAi.modalCreated")}</p>
                     <p className="font-medium">{item.createdAt.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}</p>
                   </div>
                 </div>
 
                 <div>
-                  <p className="text-xs font-semibold text-muted-foreground mb-1.5">SCRIPT / DESKRIPSI</p>
+                  <p className="text-xs font-semibold text-muted-foreground mb-1.5">{t("videoAi.scriptLabel")}</p>
                   <p className="text-sm leading-relaxed bg-muted/40 rounded-lg px-3 py-2">{item.script}</p>
                 </div>
 
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <p className="text-xs font-semibold text-muted-foreground">CAPTION</p>
+                    <p className="text-xs font-semibold text-muted-foreground">{t("videoAi.captionLabel")}</p>
                     {item.caption && (
                       <button onClick={() => navigator.clipboard.writeText(item.caption)}
                         className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors">
-                        <Copy className="h-3 w-3" /> Copy
+                        <Copy className="h-3 w-3" /> {t("videoAi.copyCaption")}
                       </button>
                     )}
                   </div>
                   <p className="text-sm leading-relaxed bg-muted/40 rounded-lg px-3 py-2 whitespace-pre-line">
-                    {item.caption || (item.status === "generating" ? "Menyiapkan caption..." : "Tidak ada caption.")}
+                    {item.caption || (item.status === "generating" ? t("videoAi.preparingCaption") : t("videoAi.noCaption"))}
                   </p>
                 </div>
 
@@ -249,7 +250,7 @@ function DetailModal({
                   {connectedSocmed.length > 0 && item.status === "completed" && (
                     <div className="space-y-1.5">
                       <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-                        <Share2 className="h-3 w-3" /> BAGIKAN KE
+                        <Share2 className="h-3 w-3" /> {t("videoAi.shareTo")}
                       </p>
                       <div className="flex flex-wrap gap-1.5">
                         {connectedSocmed.includes("twitter") && (
@@ -259,7 +260,7 @@ function DetailModal({
                             )}
                             onClick={() => handleShare("twitter")}>
                             {shareSuccess === "twitter" ? <CheckCircle2 className="h-3.5 w-3.5" /> : <TwitterIcon className="h-3.5 w-3.5" />}
-                            {shareSuccess === "twitter" ? "Dibagikan!" : "Twitter / X"}
+                            {shareSuccess === "twitter" ? t("videoAi.shared") : t("videoAi.twitter")}
                           </Button>
                         )}
                         {connectedSocmed.includes("instagram") && (
@@ -269,7 +270,7 @@ function DetailModal({
                             )}
                             onClick={() => handleShare("instagram")}>
                             {shareSuccess === "instagram" ? <CheckCircle2 className="h-3.5 w-3.5" /> : <InstagramIcon className="h-3.5 w-3.5" />}
-                            {shareSuccess === "instagram" ? "Dibagikan!" : "Instagram"}
+                            {shareSuccess === "instagram" ? t("videoAi.shared") : t("videoAi.instagram")}
                           </Button>
                         )}
                         {connectedSocmed.includes("facebook") && (
@@ -279,7 +280,7 @@ function DetailModal({
                             )}
                             onClick={() => handleShare("facebook")}>
                             {shareSuccess === "facebook" ? <CheckCircle2 className="h-3.5 w-3.5" /> : <FacebookIcon className="h-3.5 w-3.5" />}
-                            {shareSuccess === "facebook" ? "Dibagikan!" : "Facebook"}
+                            {shareSuccess === "facebook" ? t("videoAi.shared") : t("videoAi.facebook")}
                           </Button>
                         )}
                       </div>
@@ -288,7 +289,7 @@ function DetailModal({
                   <Button size="sm" variant="outline"
                     className="w-full gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30"
                     onClick={() => { onDelete(item.id); onClose() }}>
-                    <Trash2 className="h-3.5 w-3.5" /> Hapus Video
+                    <Trash2 className="h-3.5 w-3.5" /> {t("videoAi.deleteVideo")}
                   </Button>
                 </div>
               </div>
@@ -297,39 +298,39 @@ function DetailModal({
             {activeTab === "edit" && (
               <div className="flex flex-col gap-4 flex-1">
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-muted-foreground">JUDUL VIDEO</Label>
+                  <Label className="text-xs font-semibold text-muted-foreground">{t("videoAi.videoTitleLabel")}</Label>
                   <Input value={editTitle} onChange={e => setEditTitle(e.target.value)}
-                    className="text-sm" placeholder="Edit judul video..." />
+                    className="text-sm" placeholder={t("videoAi.editTitlePlaceholder")} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-muted-foreground">SCRIPT / DESKRIPSI</Label>
+                  <Label className="text-xs font-semibold text-muted-foreground">{t("videoAi.scriptLabel")}</Label>
                   <Textarea value={editScript} onChange={e => setEditScript(e.target.value)}
-                    rows={4} className="resize-none text-sm" placeholder="Edit script untuk generate ulang video..." />
+                    rows={4} className="resize-none text-sm" placeholder={t("videoAi.editScriptPlaceholder")} />
                   <Button size="sm" variant="outline" className="w-full gap-1.5"
                     disabled={isRegenerating || !editScript.trim()}
                     onClick={() => onRegenVideo(item, editScript)}>
                     {isRegenerating
-                      ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating...</>
-                      : <><RotateCcw className="h-3.5 w-3.5" /> Generate Ulang Video</>
+                      ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> {t("videoAi.generatingVideoLong")}</>
+                      : <><RotateCcw className="h-3.5 w-3.5" /> {t("videoAi.regenVideo")}</>
                     }
                   </Button>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-muted-foreground">CAPTION</Label>
+                  <Label className="text-xs font-semibold text-muted-foreground">{t("videoAi.captionLabel")}</Label>
                   <Textarea value={editCaption} onChange={e => setEditCaption(e.target.value)}
-                    rows={3} className="resize-none text-sm" placeholder="Edit caption atau generate ulang..." />
+                    rows={3} className="resize-none text-sm" placeholder={t("videoAi.editCaptionPlaceholder")} />
                   <Button size="sm" variant="outline" className="w-full gap-1.5"
                     disabled={isCaptioning}
                     onClick={() => onRegenCaption(item, editScript || item.script)}>
                     {isCaptioning
-                      ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Membuat Caption...</>
-                      : <><Sparkles className="h-3.5 w-3.5" /> Generate Ulang Caption</>
+                      ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> {t("videoAi.captionGenerating")}</>
+                      : <><Sparkles className="h-3.5 w-3.5" /> {t("videoAi.regenCaption")}</>
                     }
                   </Button>
                 </div>
                 <div className="mt-auto">
                   <Button size="sm" className="w-full gap-1.5" onClick={handleSave}>
-                    <Save className="h-3.5 w-3.5" /> Simpan Perubahan
+                    <Save className="h-3.5 w-3.5" /> {t("videoAi.saveChanges")}
                   </Button>
                 </div>
               </div>
@@ -873,8 +874,8 @@ export default function VideoAIPage() {
 
   const formatTime = (seconds: number | null) => {
     if (seconds === null) return "—"
-    if (seconds < 60) return `${seconds} detik`
-    return `${Math.floor(seconds / 60)} menit`
+    if (seconds < 60) return t("videoAi.seconds", { s: seconds })
+    return t("videoAi.minutes", { m: Math.floor(seconds / 60) })
   }
 
   // ─── Render ────────────────────────────────────────────────────────────────
@@ -886,9 +887,9 @@ export default function VideoAIPage() {
         <div>
           <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
             <Video className="h-8 w-8 text-primary" />
-            Video AI
+            {t("videoAi.title")}
           </h1>
-          <p className="text-muted-foreground mt-1">Buat video dengan AI dari deskripsi teks</p>
+          <p className="text-muted-foreground mt-1">{t("videoAi.scriptDescriptionPlaceholder")}</p>
         </div>
       </div>
 
@@ -900,20 +901,20 @@ export default function VideoAIPage() {
             <CardHeader className="pb-4">
               <CardTitle className="flex items-center gap-2 text-lg">
                 <Zap className="h-5 w-5 text-primary" />
-                Generate Video
+                {t("videoAi.generate")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-5">
               {/* Model */}
               <div className="space-y-2">
-                <Label className="text-sm font-semibold">Model</Label>
+                <Label className="text-sm font-semibold">{t("videoAi.model")}</Label>
                 <div className="grid grid-cols-2 gap-2">
                   {(["text-to-video", "image-to-video"] as VideoModel[]).map(m => (
                     <button key={m} onClick={() => setModel(m)}
                       className={cn("rounded-lg border-2 px-3 py-2.5 text-sm font-medium transition-all",
                         model === m ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:border-primary/50"
                       )}>
-                      {m === "text-to-video" ? "Text to Video" : "Image to Video"}
+                      {m === "text-to-video" ? t("videoAi.textToVideo") : t("videoAi.imageToVideo")}
                     </button>
                   ))}
                 </div>
@@ -922,14 +923,14 @@ export default function VideoAIPage() {
               {/* Image Upload */}
               {model === "image-to-video" && (
                 <div className="space-y-2">
-                  <Label className="text-sm font-semibold">Gambar Sumber</Label>
+                  <Label className="text-sm font-semibold">{t("videoAi.sourceImage")}</Label>
                   <div onClick={() => fileInputRef.current?.click()}
                     className={cn("border-2 border-dashed rounded-xl cursor-pointer transition-colors flex flex-col items-center justify-center gap-2 p-4 min-h-[120px]",
                       sourceImage ? "border-primary/50" : "border-border hover:border-primary/50"
                     )}>
                     {sourceImage
                       ? <img src={sourceImage} alt="source" className="max-h-32 rounded-lg object-contain" />
-                      : <><Upload className="h-8 w-8 text-muted-foreground" /><span className="text-sm text-muted-foreground">Klik untuk upload gambar</span></>
+                      : <><Upload className="h-8 w-8 text-muted-foreground" /><span className="text-sm text-muted-foreground">{t("videoAi.clickToUpload")}</span></>
                     }
                   </div>
                   <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
@@ -938,7 +939,7 @@ export default function VideoAIPage() {
 
               {/* Ratio Picker */}
               <div className="space-y-2">
-                <Label className="text-sm font-semibold">Rasio Video</Label>
+                <Label className="text-sm font-semibold">{t("videoAi.ratio")}</Label>
                 <div className="grid grid-cols-5 gap-1.5">
                   {RATIO_OPTIONS.map(r => (
                     <button key={r.value} onClick={() => setRatio(r.value)} title={`${r.label} (${r.ratio})`}
@@ -958,15 +959,15 @@ export default function VideoAIPage() {
 
               {/* Resolution */}
               <div className="space-y-2">
-                <Label className="text-sm font-semibold">Resolusi</Label>
+                <Label className="text-sm font-semibold">{t("videoAi.resolution")}</Label>
                 <div className="grid grid-cols-4 gap-2">
                   {(["480p", "720p", "1080p", "2K"] as Resolution[]).map(r => (
                     <button key={r} onClick={() => setResolution(r)}
                       className={cn("rounded-lg border-2 px-1 py-2 text-sm font-medium transition-all flex flex-col items-center",
                         resolution === r ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:border-primary/50"
                       )}>
-                      <span>{r}</span>
-                      <span className="text-[10px] font-normal opacity-70">{resolutionCost[r]} koin</span>
+                      <span>{r === "480p" ? t("videoAi.resolution480p") : r === "720p" ? t("videoAi.resolution720p") : r === "1080p" ? t("videoAi.resolution1080p") : t("videoAi.resolution2k")}</span>
+                      <span className="text-[10px] font-normal opacity-70">{resolutionCost[r]} {t("header.coins")}</span>
                     </button>
                   ))}
                 </div>
@@ -974,48 +975,48 @@ export default function VideoAIPage() {
 
               {/* Title */}
               <div className="space-y-2">
-                <Label htmlFor="title" className="text-sm font-semibold">Judul Video</Label>
-                <Input id="title" placeholder="Masukkan judul video..." value={title} onChange={e => setTitle(e.target.value)} className="text-sm" />
+                <Label htmlFor="title" className="text-sm font-semibold">{t("videoAi.videoTitle")}</Label>
+                <Input id="title" placeholder={t("videoAi.videoTitlePlaceholder")} value={title} onChange={e => setTitle(e.target.value)} className="text-sm" />
               </div>
 
               {/* Duration */}
               <div className="space-y-2">
-                <Label htmlFor="duration" className="text-sm font-semibold">Durasi (detik)</Label>
+                <Label htmlFor="duration" className="text-sm font-semibold">{t("videoAi.durationLabel")}</Label>
                 <Input id="duration" type="number" min="1" max="60" value={duration}
-                  onChange={e => setDuration(e.target.value)} placeholder="30" className="text-sm" />
-                <p className="text-xs text-muted-foreground">Maksimal 60 detik</p>
+                  onChange={e => setDuration(e.target.value)} placeholder={t("videoAi.durationPlaceholder")} className="text-sm" />
+                <p className="text-xs text-muted-foreground">{t("videoAi.durationMax")}</p>
               </div>
 
               {/* Script */}
               <div className="space-y-2">
-                <Label htmlFor="script" className="text-sm font-semibold">Script / Deskripsi</Label>
+                <Label htmlFor="script" className="text-sm font-semibold">{t("videoAi.scriptDescription")}</Label>
                 <Textarea id="script"
-                  placeholder="Deskripsikan video yang ingin kamu buat..."
+                  placeholder={t("videoAi.scriptDescriptionPlaceholder")}
                   value={script} onChange={e => setScript(e.target.value)} rows={5} className="resize-none text-sm" />
               </div>
 
               {/* Cost */}
               <div className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Info className="h-4 w-4" /><span>Biaya generate</span>
+                  <Info className="h-4 w-4" /><span>{t("videoAi.coinCost")}</span>
                 </div>
                 <div className="flex items-center gap-1 font-semibold text-sm">
                   <Coins className="h-4 w-4 text-amber-500" />
-                  <span className="text-amber-600">{coinCost} koin</span>
+                  <span className="text-amber-600">{coinCost} {t("header.coins")}</span>
                 </div>
               </div>
 
               {/* Only show insufficient balance warning AFTER balance has fully loaded to prevent flash */}
               {isBalanceLoaded && coinBalance < coinCost && (
                 <div className="rounded-lg bg-destructive/10 border border-destructive/20 px-3 py-2 text-sm text-destructive flex items-center gap-2">
-                  <XCircle className="h-4 w-4 flex-shrink-0" />Saldo koin tidak cukup.
+                  <XCircle className="h-4 w-4 flex-shrink-0" />{t("videoAi.insufficientBalance")}
                 </div>
               )}
 
               <Button onClick={handleGenerate} disabled={isGenerating || !canGenerate} className="w-full h-12 text-base font-semibold" size="lg">
                 {isGenerating
-                  ? <><Loader2 className="h-5 w-5 mr-2 animate-spin" />Sedang Generate...</>
-                  : <><Sparkles className="h-5 w-5 mr-2" />Generate Video</>
+                  ? <><Loader2 className="h-5 w-5 mr-2 animate-spin" />{t("videoAi.generatingState")}</>
+                  : <><Sparkles className="h-5 w-5 mr-2" />{t("videoAi.generate")}</>
                 }
               </Button>
             </CardContent>
@@ -1028,7 +1029,7 @@ export default function VideoAIPage() {
             <CardHeader className="pb-4">
               <CardTitle className="flex items-center gap-2 text-lg">
                 <Video className="h-5 w-5 text-primary" />
-                Hasil Generate
+                {t("videoAi.resultTitle")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1037,8 +1038,8 @@ export default function VideoAIPage() {
                 {activeItem?.status === "generating" ? (
                   <div className="flex flex-col items-center gap-3 text-muted-foreground">
                     <Loader2 className="h-10 w-10 animate-spin text-primary" />
-                    <p className="text-sm font-medium">Membuat video...</p>
-                    <p className="text-xs opacity-60">Ini mungkin memerlukan beberapa menit</p>
+                    <p className="text-sm font-medium">{t("videoAi.generatingVideo")}</p>
+                    <p className="text-xs opacity-60">{t("videoAi.mayTakeMinutes")}</p>
                   </div>
                 ) : activeItem?.status === "completed" && activeItem?.videoUrl ? (
                   <video src={activeItem.videoUrl} controls className="w-full h-full rounded-xl object-contain"
@@ -1053,21 +1054,21 @@ export default function VideoAIPage() {
                 ) : activeItem?.status === "failed" ? (
                   <div className="flex flex-col items-center gap-3 text-muted-foreground p-8 text-center">
                     <XCircle className="h-12 w-12 opacity-40 text-destructive" />
-                    <p className="text-sm font-medium text-destructive">Generate video gagal</p>
-                    <p className="text-xs opacity-60">Coba lagi dengan prompt berbeda</p>
+                    <p className="text-sm font-medium text-destructive">{t("videoAi.generationFailed")}</p>
+                    <p className="text-xs opacity-60">{t("videoAi.tryDifferentPrompt")}</p>
                   </div>
                 ) : activeItem?.status === "completed" ? (
                   <div className="flex flex-col items-center gap-3 text-muted-foreground p-8 text-center">
                     <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center">
                       <Video className="h-8 w-8 text-primary" />
                     </div>
-                    <p className="text-sm font-medium">Video berhasil dibuat</p>
-                    <p className="text-xs opacity-60">Preview tidak tersedia</p>
+                    <p className="text-sm font-medium">{t("videoAi.videoCreated")}</p>
+                    <p className="text-xs opacity-60">{t("videoAi.previewUnavailable")}</p>
                   </div>
                 ) : (
                   <div className="flex flex-col items-center gap-3 text-muted-foreground p-8 text-center">
                     <Video className="h-12 w-12 opacity-30" />
-                    <p className="text-sm">Hasil video akan tampil di sini</p>
+                    <p className="text-sm">{t("videoAi.waitingResult")}</p>
                   </div>
                 )}
               </div>
@@ -1078,10 +1079,10 @@ export default function VideoAIPage() {
                     <p className="text-sm font-semibold">{activeItem.title}</p>
                     <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
                       <span>{activeItem.resolution}</span><span>·</span>
-                      <span>{activeItem.duration}s</span><span>·</span>
-                      <span>{activeItem.coinCost} koin</span><span>·</span>
+                      <span>{activeItem.duration}{t("videoAi.secondsAbbr")}</span><span>·</span>
+                      <span>{activeItem.coinCost} {t("header.coins")}</span><span>·</span>
                       <Clock className="h-3 w-3 self-center" />
-                      <span>Selesai dalam {formatTime(activeItem.completedTime)}</span>
+                      <span>{t("videoAi.completedIn")} {formatTime(activeItem.completedTime)}</span>
                     </div>
                     {activeItem.caption && (
                       <p className="text-xs italic text-muted-foreground border-t pt-2">"{activeItem.caption}"</p>
@@ -1090,17 +1091,17 @@ export default function VideoAIPage() {
                   {connectedSocmed.length > 0 && (
                     <div className="space-y-2">
                       <Label className="text-sm font-semibold flex items-center gap-2">
-                        <Share2 className="h-4 w-4" /> Bagikan ke Sosial Media
+                        <Share2 className="h-4 w-4" /> {t("videoAi.shareToSocial")}
                       </Label>
                       <div className="flex flex-wrap gap-2">
                         {connectedSocmed.includes("twitter") && (
                           <Button size="sm" className="gap-2 bg-sky-500 hover:bg-sky-600 text-white border-0">
-                            <TwitterIcon className="h-4 w-4" /> Twitter / X
+                            <TwitterIcon className="h-4 w-4" /> {t("videoAi.twitter")}
                           </Button>
                         )}
                         {connectedSocmed.includes("instagram") && (
                           <Button size="sm" className="gap-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white border-0">
-                            <InstagramIcon className="h-4 w-4" /> Instagram
+                            <InstagramIcon className="h-4 w-4" /> {t("videoAi.instagram")}
                           </Button>
                         )}
                       </div>
@@ -1118,15 +1119,15 @@ export default function VideoAIPage() {
         <CardContent className="pt-4">
           <Tabs defaultValue="history">
             <TabsList className="mb-4">
-              <TabsTrigger value="history" className="gap-2"><History className="h-4 w-4" /> History Generate</TabsTrigger>
-              <TabsTrigger value="gallery" className="gap-2"><LayoutGrid className="h-4 w-4" /> Galeri Video</TabsTrigger>
+              <TabsTrigger value="history" className="gap-2"><History className="h-4 w-4" /> {t("videoAi.history")}</TabsTrigger>
+              <TabsTrigger value="gallery" className="gap-2"><LayoutGrid className="h-4 w-4" /> {t("videoAi.gallery")}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="history">
               {history.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <History className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                  <p className="text-sm">Belum ada riwayat generate video</p>
+                  <p className="text-sm">{t("videoAi.noVideosGenerated")}</p>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -1147,31 +1148,31 @@ export default function VideoAIPage() {
                           {item.status === "completed" && <CheckCircle2 className="h-3 w-3" />}
                           {item.status === "failed" && <XCircle className="h-3 w-3" />}
                           {item.status === "generating" && <Loader2 className="h-3 w-3 animate-spin" />}
-                          {item.status === "completed" ? "Selesai" : item.status === "failed" ? "Gagal" : "Proses..."}
+                          {item.status === "completed" ? t("videoAi.completed") : item.status === "failed" ? t("videoAi.failed") : t("videoAi.processing")}
                         </Badge>
                       </div>
                       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {formatTime(item.completedTime)}</span>
-                        <span>Durasi: {item.duration} detik</span>
+                        <span>{t("videoAi.modalDuration")}: {t("videoAi.seconds", { s: item.duration })}</span>
                         <span>{item.resolution} · {RATIO_OPTIONS.find(r => r.value === item.ratio)?.ratio ?? item.ratio}</span>
-                        <span>{item.coinCost} koin</span>
+                        <span>{item.coinCost} {t("header.coins")}</span>
                         <span>{item.createdAt.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}</span>
                       </div>
                       {item.caption && (
-                        <p className="text-xs italic text-muted-foreground line-clamp-1">Caption: {item.caption}</p>
+                        <p className="text-xs italic text-muted-foreground line-clamp-1">{t("videoAi.caption")}: {item.caption}</p>
                       )}
                       <div className="flex gap-2 pt-1" onClick={e => e.stopPropagation()}>
                         <Button size="sm" variant="outline" className="flex-1 gap-1" onClick={() => openDetail(item)}>
-                          <Eye className="h-3 w-3" /> Lihat Detail
+                          <Eye className="h-3 w-3" /> {t("videoAi.detail")}
                         </Button>
                         <Button size="sm" variant="outline" className="flex-1 gap-1"
                           onClick={() => { setDetailItem(item); setDetailOpen(true) }}>
-                          <Edit2 className="h-3 w-3" /> Edit
+                          <Edit2 className="h-3 w-3" /> {t("videoAi.edit")}
                         </Button>
                         <Button size="sm" variant="outline" className="flex-1 gap-1"
                           disabled={item.status !== "completed" || connectedSocmed.length === 0}
                           onClick={() => openDetail(item)}>
-                          <Send className="h-3 w-3" /> Post
+                          <Send className="h-3 w-3" /> {t("videoAi.send")}
                         </Button>
                         <Button size="sm" variant="outline" className="px-3 text-destructive hover:text-destructive hover:bg-destructive/10"
                           onClick={() => handleDelete(item.id)}>
@@ -1188,7 +1189,7 @@ export default function VideoAIPage() {
               {history.filter(h => h.status === "completed").length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <LayoutGrid className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                  <p className="text-sm">Belum ada video di galeri</p>
+                  <p className="text-sm">{t("videoAi.noVideosGenerated")}</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
@@ -1218,15 +1219,15 @@ export default function VideoAIPage() {
                         <p className="font-medium text-sm line-clamp-1">{item.title}</p>
                         <div className="text-xs text-muted-foreground flex flex-wrap gap-2">
                           <span>{item.resolution}</span><span>·</span>
-                          <span>{item.duration}s</span><span>·</span>
-                          <span>{item.coinCost} koin</span>
+                          <span>{item.duration}{t("videoAi.secondsAbbr")}</span><span>·</span>
+                          <span>{item.coinCost} {t("header.coins")}</span>
                         </div>
                         {item.caption && (
                           <p className="text-xs text-muted-foreground italic line-clamp-2">"{item.caption}"</p>
                         )}
                         <div className="flex gap-2 pt-1" onClick={e => e.stopPropagation()}>
                           <Button size="sm" variant="outline" className="flex-1 gap-1.5" onClick={() => openDetail(item)}>
-                            <Share2 className="h-3 w-3" /> Bagikan
+                            <Share2 className="h-3 w-3" /> {t("videoAi.shareToSocial")}
                           </Button>
                           <Button size="sm" variant="outline" className="px-2 text-destructive hover:text-destructive" onClick={() => handleDelete(item.id)}>
                             <Trash2 className="h-3 w-3" />
@@ -1264,7 +1265,7 @@ export default function VideoAIPage() {
               <div className="p-2 bg-red-100 rounded-full">
                 <AlertTriangle className="h-5 w-5 text-red-600" />
               </div>
-              <DialogTitle>Error</DialogTitle>
+              <DialogTitle>{t("common.error")}</DialogTitle>
             </div>
             <DialogDescription className="pt-2">
               {errorMessage}
@@ -1272,7 +1273,7 @@ export default function VideoAIPage() {
           </DialogHeader>
           <DialogFooter>
             <Button onClick={() => setShowErrorModal(false)}>
-              Tutup
+              {t("common.close")}
             </Button>
           </DialogFooter>
         </DialogContent>

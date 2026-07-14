@@ -57,7 +57,7 @@ export function LoginForm() {
             <Input
               id="email"
               type="email"
-              placeholder="contoh@carubra.id"
+              placeholder={t("auth.emailPlaceholder")}
               value={email}
               onChange={(e) => {
                 setEmail(e.target.value)

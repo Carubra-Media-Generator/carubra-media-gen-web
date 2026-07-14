@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react"
 import { useSearchParams } from "next/navigation"
+import { useLanguage } from "@/contexts/language-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
@@ -103,50 +104,50 @@ type PlatformMeta = {
 const PLATFORM_META: PlatformMeta[] = [
   {
     id: "instagram", name: "Instagram", color: "#E1306C", Icon: Camera,
-    connectLabel: "Masuk dengan Instagram",
-    connectHint: "Mulai koneksi Instagram Business atau Creator melalui OAuth. Pastikan akun sudah terhubung ke Facebook Page.",
-    usernameLabel: "Username Instagram",
-    usernamePlaceholder: "@namakamu",
+    connectLabel: "",
+    connectHint: "",
+    usernameLabel: "",
+    usernamePlaceholder: "",
     postTypes: ["feed", "reels", "story"],
   },
   {
     id: "facebook", name: "Facebook", color: "#1877F2", Icon: Users,
-    connectLabel: "Masuk dengan Facebook",
-    connectHint: "Mulai OAuth untuk menghubungkan Facebook Page kamu. Pastikan kamu adalah Admin halaman tersebut.",
-    usernameLabel: "Nama Facebook Page",
-    usernamePlaceholder: "Nama Page / @username",
+    connectLabel: "",
+    connectHint: "",
+    usernameLabel: "",
+    usernamePlaceholder: "",
     postTypes: ["feed", "story", "reels"],
   },
   {
     id: "tiktok", name: "TikTok", color: "#010101", Icon: TikTokIcon,
-    connectLabel: "Masuk dengan TikTok",
-    connectHint: "Hubungkan akun TikTok melalui OAuth untuk memeriksa apakah koneksi dapat dibuat.",
-    usernameLabel: "Username TikTok",
-    usernamePlaceholder: "@namakamu",
+    connectLabel: "",
+    connectHint: "",
+    usernameLabel: "",
+    usernamePlaceholder: "",
     postTypes: ["video"],
   },
   {
     id: "youtube", name: "YouTube", color: "#FF0000", Icon: Video,
-    connectLabel: "Masuk dengan Google",
-    connectHint: "Hubungkan channel YouTube kamu melalui akun Google untuk menjadwalkan upload video.",
-    usernameLabel: "Nama Channel YouTube",
-    usernamePlaceholder: "Nama Channel",
+    connectLabel: "",
+    connectHint: "",
+    usernameLabel: "",
+    usernamePlaceholder: "",
     postTypes: ["video", "shorts"],
   },
   {
     id: "twitter", name: "X (Twitter)", color: "#14171A", Icon: X,
-    connectLabel: "Masuk dengan X",
-    connectHint: "Gunakan OAuth untuk menghubungkan akun X/Twitter dan mengaktifkan penjadwalan tweet.",
-    usernameLabel: "Username X",
-    usernamePlaceholder: "@namakamu",
+    connectLabel: "",
+    connectHint: "",
+    usernameLabel: "",
+    usernamePlaceholder: "",
     postTypes: ["tweet"],
   },
   {
     id: "threads", name: "Threads", color: "#101010", Icon: ThreadsIcon,
-    connectLabel: "Masuk dengan Threads",
-    connectHint: "Gunakan OAuth untuk menghubungkan akun Threads dan mengaktifkan penjadwalan post.",
-    usernameLabel: "Username Threads",
-    usernamePlaceholder: "@namakamu",
+    connectLabel: "",
+    connectHint: "",
+    usernameLabel: "",
+    usernamePlaceholder: "",
     postTypes: ["post"],
     uiOnly: true,
   },
@@ -155,15 +156,15 @@ const PLATFORM_META: PlatformMeta[] = [
 const metaMap = Object.fromEntries(PLATFORM_META.map(p => [p.id, p])) as Record<SocmedId, PlatformMeta>
 
 const STATUS_META = {
-  scheduled: { label: "Terjadwal",  cls: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",   Icon: AlarmClock   },
-  posted:  { label: "Selesai",   cls: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400", Icon: CheckCircle2 },
-  failed:     { label: "Gagal",     cls: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",         Icon: XCircle      },
-  partial:    { label: "Sebagian",  cls: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400", Icon: AlertCircle  },
-  draft:      { label: "Draft",     cls: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",        Icon: Save         },
+  scheduled: { label: "autoUpload.scheduled",  cls: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",   Icon: AlarmClock   },
+  posted:  { label: "autoUpload.posted",   cls: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400", Icon: CheckCircle2 },
+  failed:     { label: "autoUpload.failed",     cls: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",         Icon: XCircle      },
+  partial:    { label: "autoUpload.partial",  cls: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400", Icon: AlertCircle  },
+  draft:      { label: "autoUpload.draft",     cls: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",        Icon: Save         },
 } as const
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
-async function apiFetch<T = any>(url: string, options?: RequestInit): Promise<T> {
+async function apiFetch<T = any>(url: string, options?: RequestInit, t?: (key: string) => string): Promise<T> {
   const token = typeof window !== 'undefined' ? localStorage.getItem('carubra-token') : null
   const res = await fetch(url, {
     ...options,
@@ -183,7 +184,7 @@ async function apiFetch<T = any>(url: string, options?: RequestInit): Promise<T>
   }
 
   if (!res.ok) {
-    const message = data?.error || text || 'Terjadi kesalahan pada server'
+    const message = data?.error || text || (t ? t('autoUpload.serverError') : 'Terjadi kesalahan pada server')
     throw new Error(message)
   }
 
@@ -193,6 +194,7 @@ async function apiFetch<T = any>(url: string, options?: RequestInit): Promise<T>
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AutoUploadPage() {
+  const { t } = useLanguage()
   // Remote data
   const [connections, setConnections] = useState<Connection[]>([])
   const [posts, setPosts] = useState<ScheduledPost[]>([])
@@ -244,7 +246,7 @@ export default function AutoUploadPage() {
   const fetchConnections = useCallback(async () => {
     setLoadingConnections(true)
     try {
-      const data = await apiFetch<{ connections: Connection[] }>("/api/social-connect")
+      const data = await apiFetch<{ connections: Connection[] }>("/api/social-connect", undefined, t)
       setConnections(data.connections)
       setFetchError(null)
     } catch (e: any) {
@@ -257,7 +259,7 @@ export default function AutoUploadPage() {
   const fetchPosts = useCallback(async () => {
     setLoadingPosts(true)
     try {
-      const data = await apiFetch<{ posts: ScheduledPost[] }>("/api/scheduled-posts")
+      const data = await apiFetch<{ posts: ScheduledPost[] }>("/api/scheduled-posts", undefined, t)
       setPosts(data.posts)
     } catch {
       // silently show empty list
@@ -269,7 +271,7 @@ export default function AutoUploadPage() {
   const fetchGeneratedContents = useCallback(async () => {
     setLoadingGenerated(true)
     try {
-      const data = await apiFetch<{ contents: GeneratedContent[] }>("/api/generated-contents")
+      const data = await apiFetch<{ contents: GeneratedContent[] }>("/api/generated-contents", undefined, t)
       setGeneratedContents(data.contents)
     } catch {
       // silently show empty list
@@ -303,10 +305,10 @@ export default function AutoUploadPage() {
 
   const startOAuth = async (id: SocmedId) => {
     try {
-      const data = await apiFetch<{ url: string }>(`/api/social-connect/${id}/start`, { method: 'POST' })
+      const data = await apiFetch<{ url: string }>(`/api/social-connect/${id}/start`, { method: 'POST' }, t)
       window.location.href = data.url
     } catch (e: any) {
-      setErrorMessage(`Gagal memulai koneksi ${id}: ${e.message}`)
+      setErrorMessage(t("autoUpload.connectError", { platform: id, message: e.message }))
       setShowErrorModal(true)
     }
   }
@@ -346,7 +348,7 @@ export default function AutoUploadPage() {
   const handleConfirmConnect = async () => {
     if (!connectPlatform) return
     if (!connectUsername.trim()) {
-      setConnectError("Username tidak boleh kosong.")
+      setConnectError(t("autoUpload.usernameRequired"))
       return
     }
     
@@ -359,7 +361,7 @@ export default function AutoUploadPage() {
           platform: connectPlatform, 
           username: connectUsername.trim(),
         }),
-      })
+      }, t)
       await fetchConnections()
       setConnectPlatform(null)
       setConnectUsername("")
@@ -374,13 +376,13 @@ export default function AutoUploadPage() {
     if (!detailPlatform) return
     setIsDisconnecting(true)
     try {
-      await apiFetch(`/api/social-connect/${detailPlatform}`, { method: "DELETE" })
+      await apiFetch(`/api/social-connect/${detailPlatform}`, { method: "DELETE" }, t)
       await fetchConnections()
       setSelectedPlatforms(prev => prev.filter(p => p !== detailPlatform))
       setDetailPlatform(null)
       setDisconnectConfirm(false)
     } catch (e: any) {
-      setErrorMessage(`Gagal memutus: ${e.message}`)
+      setErrorMessage(t("autoUpload.disconnectError", { message: e.message }))
       setShowErrorModal(true)
     } finally {
       setIsDisconnecting(false)
@@ -428,8 +430,8 @@ export default function AutoUploadPage() {
   const handleSubmit = async (asDraft = false) => {
     setFormError(null)
     if (!asDraft) {
-      if (!date || !time) return setFormError("Tanggal dan waktu wajib diisi.")
-      if (selectedPlatforms.length === 0) return setFormError("Pilih minimal satu platform.")
+      if (!date || !time) return setFormError(t("autoUpload.dateTimeRequired"))
+      if (selectedPlatforms.length === 0) return setFormError(t("autoUpload.selectPlatformError"))
     }
 
     let hasMedia = false
@@ -455,11 +457,11 @@ export default function AutoUploadPage() {
       }
     }
 
-    if (!hasMedia) return setFormError("Pilih media dari upload atau generated content.")
+    if (!hasMedia) return setFormError(t("autoUpload.selectMediaError"))
 
     for (const platform of selectedPlatforms) {
       if (!postTypes[platform as SocmedId]) {
-        return setFormError(`Pilih tipe postingan untuk ${metaMap[platform].name}`)
+        return setFormError(t("autoUpload.selectPostTypeError", { platform: metaMap[platform].name }))
       }
     }
 
@@ -496,13 +498,13 @@ export default function AutoUploadPage() {
     setIsRunning(true)
     try {
       const data = await apiFetch<{ posted: number; failed: number; errors: string[] }>('/api/scheduled-posts/run', { method: 'POST' })
-      const message = `Diproses: ${data.posted} berhasil, ${data.failed} gagal.`
+      const message = t("autoUpload.runResultSuccess", { posted: data.posted, failed: data.failed })
       const fullMessage = data.errors && data.errors.length ? `${message}\n\n${data.errors.join('\n')}` : message
       setRunResultMessage(fullMessage)
       setShowRunResultModal(true)
       await fetchPosts()
     } catch (e: any) {
-      setRunResultMessage(`Gagal menjalankan jadwal: ${e.message}`)
+      setRunResultMessage(t("autoUpload.runFailed", { message: e.message }))
       setShowRunResultModal(true)
     } finally {
       setIsRunning(false)
@@ -514,14 +516,31 @@ export default function AutoUploadPage() {
       await apiFetch(`/api/scheduled-posts/${id}`, { method: "DELETE" })
       setPosts(prev => prev.filter(p => p._id !== id))
     } catch (e: any) {
-      setErrorMessage(`Gagal hapus: ${e.message}`)
+      setErrorMessage(t("autoUpload.deleteError", { message: e.message }))
       setShowErrorModal(true)
     }
   }
 
   // ─── Render ─────────────────────────────────────────────────────────────────
 
-  const connectMeta  = connectPlatform ? metaMap[connectPlatform] : null
+  const getPlatformMeta = (id: SocmedId) => {
+    const base = metaMap[id]
+    return {
+      ...base,
+      connectLabel: t(`autoUpload.${id}ConnectLabel`) || "",
+      connectHint: t(`autoUpload.${id}ConnectHint`) || "",
+      usernameLabel: t(`autoUpload.${id}UsernameLabel`) || "",
+      usernamePlaceholder: t(`autoUpload.${id}UsernamePlaceholder`) || "",
+    }
+  }
+
+  const connectMeta  = connectPlatform ? getPlatformMeta(connectPlatform) : null
+  const tPlatform = (field: string) => {
+    if (!connectPlatform) return ''
+    const key = `autoUpload.${connectPlatform}${field.charAt(0).toUpperCase() + field.slice(1)}`
+    return t(key)
+  }
+
   const detailConn   = detailPlatform  ? getConnection(detailPlatform) : null
   const detailMeta   = detailPlatform  ? metaMap[detailPlatform] : null
   const csMeta       = comingSoonPlatform ? metaMap[comingSoonPlatform] : null
@@ -533,10 +552,10 @@ export default function AutoUploadPage() {
       <div>
         <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
           <Send className="h-8 w-8 text-primary" />
-          Upload Otomatis
+          {t("autoUpload.title")}
         </h1>
         <p className="text-muted-foreground mt-1">
-          Jadwalkan dan publikasikan konten ke semua platform dari satu tempat
+          {t("autoUpload.description")}
         </p>
       </div>
 
@@ -545,7 +564,7 @@ export default function AutoUploadPage() {
           <AlertCircle className="h-4 w-4 flex-shrink-0" />
           {fetchError}
           <button onClick={() => { fetchConnections(); fetchPosts() }} className="ml-auto hover:underline flex items-center gap-1">
-            <RefreshCw className="h-3.5 w-3.5" /> Coba lagi
+            <RefreshCw className="h-3.5 w-3.5" /> {t("autoUpload.retry")}
           </button>
         </div>
       )}
@@ -554,7 +573,7 @@ export default function AutoUploadPage() {
       <section className="space-y-3">
         <div className="flex items-center gap-2">
           <Link2 className="h-5 w-5 text-primary" />
-          <h2 className="text-lg font-semibold">Koneksi Media Sosial</h2>
+          <h2 className="text-lg font-semibold">{t("autoUpload.connections")}</h2>
           {loadingConnections && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground ml-1" />}
         </div>
 
@@ -579,7 +598,7 @@ export default function AutoUploadPage() {
                     onClick={() => { setDetailPlatform(id); setDisconnectConfirm(false) }}
                     className="text-[10px] font-medium flex items-center gap-1 text-green-600 dark:text-green-400 hover:underline"
                   >
-                    <CheckCircle2 className="h-3 w-3" /> Terhubung
+                    <CheckCircle2 className="h-3 w-3" /> {t("autoUpload.connected")}
                   </button>
                 ) : (
                   <button
@@ -590,7 +609,7 @@ export default function AutoUploadPage() {
                       uiOnly ? "text-amber-600 dark:text-amber-400" : "text-primary"
                     )}
                   >
-                    <Link2 className="h-3 w-3" /> Hubungkan
+                    <Link2 className="h-3 w-3" /> {t("autoUpload.connect")}
                   </button>
                 )}
               </div>
@@ -603,7 +622,7 @@ export default function AutoUploadPage() {
       <section className="space-y-3">
         <div className="flex items-center gap-2">
           <Calendar className="h-5 w-5 text-primary" />
-          <h2 className="text-lg font-semibold">Jadwalkan Postingan</h2>
+          <h2 className="text-lg font-semibold">{t("autoUpload.schedulePost")}</h2>
         </div>
 
         <Card className="border-2">
@@ -611,13 +630,13 @@ export default function AutoUploadPage() {
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label className="flex items-center gap-2 text-sm font-semibold">
-                  <Calendar className="h-4 w-4 text-muted-foreground" /> Tanggal
+                  <Calendar className="h-4 w-4 text-muted-foreground" /> {t("autoUpload.date")}
                 </Label>
                 <Input type="date" value={date} onChange={e => setDate(e.target.value)} />
               </div>
               <div className="space-y-2">
                 <Label className="flex items-center gap-2 text-sm font-semibold">
-                  <Clock className="h-4 w-4 text-muted-foreground" /> Waktu
+                  <Clock className="h-4 w-4 text-muted-foreground" /> {t("autoUpload.time")}
                 </Label>
                 <Input type="time" value={time} onChange={e => setTime(e.target.value)} />
               </div>
@@ -625,14 +644,14 @@ export default function AutoUploadPage() {
 
             <div className="space-y-2">
               <Label className="text-sm font-semibold flex items-center gap-2">
-                <Upload className="h-4 w-4 text-muted-foreground" /> Pilih Sumber Konten
+                <Upload className="h-4 w-4 text-muted-foreground" /> {t("autoUpload.contentSource")}
               </Label>
               <div className="flex gap-2 items-center">
                 <label className={cn("px-3 py-1 rounded-lg border cursor-pointer text-sm", mediaSource === 'upload' ? 'border-primary bg-primary/10' : 'border-border')}>
-                  <input type="radio" name="mediaSource" className="sr-only" checked={mediaSource === 'upload'} onChange={() => { setMediaSource('upload'); setSelectedGeneratedContent(null); setCaption('') }} /> Upload
+                  <input type="radio" name="mediaSource" className="sr-only" checked={mediaSource === 'upload'} onChange={() => { setMediaSource('upload'); setSelectedGeneratedContent(null); setCaption('') }} /> {t("autoUpload.upload")}
                 </label>
                 <label className={cn("px-3 py-1 rounded-lg border cursor-pointer text-sm", mediaSource === 'generated' ? 'border-primary bg-primary/10' : 'border-border')}>
-                  <input type="radio" name="mediaSource" className="sr-only" checked={mediaSource === 'generated'} onChange={() => { setMediaSource('generated'); setMediaFile(null); setMediaPreview(null); setCaption('') }} /> Generated
+                  <input type="radio" name="mediaSource" className="sr-only" checked={mediaSource === 'generated'} onChange={() => { setMediaSource('generated'); setMediaFile(null); setMediaPreview(null); setCaption('') }} /> {t("autoUpload.generated")}
                 </label>
               </div>
 
@@ -654,11 +673,11 @@ export default function AutoUploadPage() {
                         )}
                         <div>
                           <p className="text-sm font-medium">{mediaFile.name}</p>
-                          <p className="text-xs text-muted-foreground">{(mediaFile.size / 1024).toFixed(1)} KB</p>
+                          <p className="text-xs text-muted-foreground">{t("autoUpload.fileSize", { size: (mediaFile.size / 1024).toFixed(1) })}</p>
                           <button
                             onClick={e => { e.stopPropagation(); setMediaFile(null); setMediaPreview(null) }}
                             className="text-xs text-destructive hover:underline mt-1"
-                          >Hapus</button>
+                          >{t("autoUpload.remove")}</button>
                         </div>
                       </div>
                     ) : (
@@ -667,8 +686,8 @@ export default function AutoUploadPage() {
                           <ImageIcon className="h-8 w-8" />
                           <Video className="h-8 w-8" />
                         </div>
-                        <p className="text-sm">Klik untuk upload gambar atau video</p>
-                        <p className="text-xs opacity-60">JPG, PNG, MP4, MOV — maks 100MB</p>
+                        <p className="text-sm">{t("autoUpload.clickToUpload")}</p>
+                        <p className="text-xs opacity-60">{t("autoUpload.uploadLimit")}</p>
                       </div>
                     )}
                   </div>
@@ -677,9 +696,9 @@ export default function AutoUploadPage() {
               ) : (
                 <div className="grid grid-cols-3 gap-2">
                   {loadingGenerated ? (
-                    <div className="col-span-3 text-sm text-muted-foreground">Memuat generated contents...</div>
+                    <div className="col-span-3 text-sm text-muted-foreground">{t("autoUpload.loadingGenerated")}</div>
                   ) : generatedContents.length === 0 ? (
-                    <div className="col-span-3 text-sm text-muted-foreground">Belum ada konten generated.</div>
+                    <div className="col-span-3 text-sm text-muted-foreground">{t("autoUpload.noGenerated")}</div>
                   ) : (
                     generatedContents.map(c => (
                       <button key={c._id} onClick={async () => {
@@ -713,11 +732,11 @@ export default function AutoUploadPage() {
                                 item._id === c._id ? { ...item, caption: data.caption } : item
                               ))
                             } else {
-                              setCaptionError("Gagal membuat caption. Silakan tulis manual.")
+                              setCaptionError(t("autoUpload.captionFailed"))
                             }
                           } catch (err) {
                             console.error("Caption generation error:", err)
-                            setCaptionError("Gagal membuat caption. Silakan tulis manual.")
+                            setCaptionError(t("autoUpload.captionFailed"))
                           } finally {
                             setIsGeneratingCaption(false)
                           }
@@ -743,10 +762,10 @@ export default function AutoUploadPage() {
 
             <div className="space-y-2">
               <Label className="text-sm font-semibold flex items-center gap-2">
-                <FileText className="h-4 w-4 text-muted-foreground" /> Caption / Teks Postingan
+                <FileText className="h-4 w-4 text-muted-foreground" /> {t("autoUpload.captionLabel")}
               </Label>
               <Textarea
-                placeholder="Tulis caption postinganmu... atau terisi otomatis dari hasil generate AI."
+                placeholder={t("autoUpload.captionPlaceholder")}
                 value={caption}
                 onChange={e => { setCaption(e.target.value); setCaptionError(null) }}
                 rows={4}
@@ -762,22 +781,22 @@ export default function AutoUploadPage() {
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label className="text-sm font-semibold">Pilih Platform</Label>
+                <Label className="text-sm font-semibold">{t("autoUpload.selectPlatform")}</Label>
                 {connectedPlatforms.length > 0 && (
                   <button onClick={selectAll} className="text-xs text-primary hover:underline">
-                    {selectedPlatforms.length === connectedPlatforms.length ? "Batal Pilih Semua" : "Pilih Semua"}
+                    {selectedPlatforms.length === connectedPlatforms.length ? t("autoUpload.deselectAll") : t("autoUpload.selectAll")}
                   </button>
                 )}
               </div>
 
               {loadingConnections ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Memuat platform...
+                  <Loader2 className="h-4 w-4 animate-spin" /> {t("autoUpload.loadingPlatforms")}
                 </div>
               ) : connectedPlatforms.length === 0 ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground p-3 bg-muted/50 rounded-lg">
                   <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                  Belum ada akun terhubung. Hubungkan platform di atas terlebih dahulu.
+                  {t("autoUpload.noConnectedPlatforms")}
                 </div>
               ) : (
                 <div className="flex flex-wrap gap-2">
@@ -804,7 +823,7 @@ export default function AutoUploadPage() {
 
             {selectedPlatforms.length > 0 && (
               <div className="space-y-2">
-                <Label className="text-sm font-semibold">Tipe Postingan per Platform</Label>
+                <Label className="text-sm font-semibold">{t("autoUpload.postType")}</Label>
                 <div className="grid gap-2">
                   {selectedPlatforms.map(pid => {
                     const meta = metaMap[pid]
@@ -817,7 +836,7 @@ export default function AutoUploadPage() {
                           onChange={e => setPostTypes(prev => ({ ...prev, [pid]: e.target.value }))}
                           className="px-3 py-2 rounded-lg border"
                         >
-                          <option value="">Pilih tipe</option>
+                          <option value="">{t("autoUpload.selectType")}</option>
                           {options.map(o => (
                             <option key={o} value={o}>{o}</option>
                           ))}
@@ -838,13 +857,13 @@ export default function AutoUploadPage() {
             <div className="flex flex-wrap gap-3 pt-2 border-t">
               <Button onClick={() => handleSubmit(false)} disabled={isSubmitting} className="gap-2">
                 {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <AlarmClock className="h-4 w-4" />}
-                Jadwalkan
+                {t("autoUpload.schedule")}
               </Button>
               <Button variant="outline" onClick={() => handleSubmit(true)} disabled={isSubmitting} className="gap-2">
-                <Save className="h-4 w-4" /> Simpan Draft
+                <Save className="h-4 w-4" /> {t("autoUpload.saveDraft")}
               </Button>
               <Button variant="ghost" onClick={resetForm} disabled={isSubmitting} className="gap-2 text-muted-foreground">
-                <X className="h-4 w-4" /> Batal
+                <X className="h-4 w-4" /> {t("autoUpload.cancel")}
               </Button>
             </div>
           </CardContent>
@@ -856,10 +875,10 @@ export default function AutoUploadPage() {
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-2">
             <AlarmClock className="h-5 w-5 text-primary" />
-            <h2 className="text-lg font-semibold">History Postingan Terjadwal</h2>
+            <h2 className="text-lg font-semibold">{t("autoUpload.history")}</h2>
           </div>
           {!loadingPosts && (
-            <Badge variant="secondary" className="ml-auto">{posts.length} postingan</Badge>
+            <Badge variant="secondary" className="ml-auto">{t("autoUpload.postCount", { count: posts.length })}</Badge>
           )}
           <Button
             variant="outline"
@@ -869,18 +888,18 @@ export default function AutoUploadPage() {
             className="ml-auto"
           >
             {isRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            Jalankan Jadwal
+            {t("autoUpload.runSchedule")}
           </Button>
         </div>
 
         {loadingPosts ? (
           <div className="flex items-center justify-center py-16 text-muted-foreground gap-2">
-            <Loader2 className="h-5 w-5 animate-spin" /> Memuat postingan...
+            <Loader2 className="h-5 w-5 animate-spin" /> {t("autoUpload.loadingPosts")}
           </div>
         ) : posts.length === 0 ? (
           <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-xl">
             <Send className="h-12 w-12 mx-auto mb-3 opacity-30" />
-            <p className="text-sm">Belum ada postingan terjadwal</p>
+            <p className="text-sm">{t("autoUpload.noPosts")}</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -900,7 +919,7 @@ export default function AutoUploadPage() {
                   </div>
                   <div className="flex-1 min-w-0 space-y-1.5">
                     <p className="text-sm font-medium line-clamp-1">
-                      {post.caption || post.mediaName || "Postingan tanpa caption"}
+                      {post.caption || post.mediaName || t("autoUpload.withoutCaption")}
                     </p>
                     <div className="flex items-center gap-1.5">
                       {post.platforms.map(pid => {
@@ -921,7 +940,7 @@ export default function AutoUploadPage() {
                   </div>
                   <div className="flex-shrink-0 flex flex-col items-end gap-2">
                     <span className={cn("inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full", sm.cls)}>
-                      <SmIcon className="h-3 w-3" /> {sm.label}
+                      <SmIcon className="h-3 w-3" /> {t(sm.label)}
                     </span>
                     <button
                       onClick={() => handleDeletePost(post._id)}
@@ -948,26 +967,26 @@ export default function AutoUploadPage() {
                 </div>
               )}
               <div>
-                <p className="text-base font-bold">{connectMeta?.connectLabel}</p>
+                <p className="text-base font-bold">{tPlatform('connectLabel')}</p>
                 <p className="text-xs font-normal text-muted-foreground">{connectMeta?.name}</p>
               </div>
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="rounded-xl bg-muted/60 px-4 py-3 text-sm text-muted-foreground leading-relaxed">
-              {connectMeta?.connectHint}
+              {tPlatform('connectHint')}
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground px-1">
               <ShieldCheck className="h-4 w-4 text-green-500 flex-shrink-0" />
-              <span>Koneksi aman — data tersimpan di database & hanya bisa diakses oleh kamu.</span>
+              <span>{t("autoUpload.secureConnection")}</span>
             </div>
             <div className="space-y-1.5">
               <Label className="text-sm font-semibold flex items-center gap-2">
                 <User className="h-3.5 w-3.5 text-muted-foreground" />
-                {connectMeta?.usernameLabel}
+                {tPlatform('usernameLabel')}
               </Label>
               <Input
-                placeholder={connectMeta?.usernamePlaceholder}
+                placeholder={tPlatform('usernamePlaceholder')}
                 value={connectUsername}
                 onChange={e => setConnectUsername(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && handleConfirmConnect()}
@@ -981,9 +1000,9 @@ export default function AutoUploadPage() {
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setConnectPlatform(null)} disabled={isConnecting}>Batal</Button>
+            <Button variant="outline" onClick={() => setConnectPlatform(null)} disabled={isConnecting}>{t("common.cancel")}</Button>
             <Button onClick={handleConfirmConnect} disabled={isConnecting} className="gap-2">
-              {isConnecting ? <><Loader2 className="h-4 w-4 animate-spin" /> Menghubungkan...</> : <><CheckCircle2 className="h-4 w-4" /> Hubungkan Akun</>}
+              {isConnecting ? <><Loader2 className="h-4 w-4 animate-spin" /> {t("autoUpload.connecting")}</> : <><CheckCircle2 className="h-4 w-4" /> {t("autoUpload.connectAccount")}</>}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1001,15 +1020,15 @@ export default function AutoUploadPage() {
               )}
               {detailMeta?.name}
             </DialogTitle>
-            <DialogDescription>Detail akun yang terhubung</DialogDescription>
+            <DialogDescription>{t("autoUpload.accountDetail")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2.5">
-              <span className="text-sm text-muted-foreground">Username</span>
+              <span className="text-sm text-muted-foreground">{t("autoUpload.username")}</span>
               <span className="text-sm font-semibold">{detailConn?.username || "—"}</span>
             </div>
             <div className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2.5">
-              <span className="text-sm text-muted-foreground">Terhubung sejak</span>
+              <span className="text-sm text-muted-foreground">{t("autoUpload.connectedSince")}</span>
               <span className="text-sm font-semibold">
                 {detailConn?.connectedAt
                   ? new Date(detailConn.connectedAt).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })
@@ -1017,27 +1036,27 @@ export default function AutoUploadPage() {
               </span>
             </div>
             <div className="flex items-center justify-between rounded-lg bg-green-50 dark:bg-green-900/20 px-3 py-2.5">
-              <span className="text-sm text-muted-foreground">Status</span>
+              <span className="text-sm text-muted-foreground">{t("autoUpload.statusConnection")}</span>
               <span className="text-sm font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">
-                <CheckCircle2 className="h-3.5 w-3.5" /> Terhubung
+                <CheckCircle2 className="h-3.5 w-3.5" /> {t("autoUpload.connected")}
               </span>
             </div>
           </div>
           <DialogFooter className="flex-col gap-2 sm:flex-row">
             {!disconnectConfirm ? (
               <>
-                <Button variant="outline" onClick={() => setDetailPlatform(null)}>Tutup</Button>
+                <Button variant="outline" onClick={() => setDetailPlatform(null)}>{t("common.close")}</Button>
                 <Button variant="destructive" onClick={() => setDisconnectConfirm(true)} className="gap-2">
-                  <Link2Off className="h-4 w-4" /> Putus Sambungan
+                  <Link2Off className="h-4 w-4" /> {t("autoUpload.disconnect")}
                 </Button>
               </>
             ) : (
               <div className="w-full space-y-2">
-                <p className="text-sm text-center text-muted-foreground">Yakin ingin memutus sambungan?</p>
+                <p className="text-sm text-center text-muted-foreground">{t("autoUpload.disconnectConfirm")}</p>
                 <div className="flex gap-2">
-                  <Button variant="outline" className="flex-1" onClick={() => setDisconnectConfirm(false)} disabled={isDisconnecting}>Batal</Button>
+                  <Button variant="outline" className="flex-1" onClick={() => setDisconnectConfirm(false)} disabled={isDisconnecting}>{t("common.cancel")}</Button>
                   <Button variant="destructive" className="flex-1" onClick={handleDisconnect} disabled={isDisconnecting}>
-                    {isDisconnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Ya, Putuskan"}
+                    {isDisconnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : t("autoUpload.yesDisconnect")}
                   </Button>
                 </div>
               </div>
@@ -1054,34 +1073,34 @@ export default function AutoUploadPage() {
               <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#E1306C20]">
                 <Instagram className="h-4 w-4 text-[#E1306C]" />
               </div>
-              Sebelum Menghubungkan Instagram
+              {t("autoUpload.instagramInstructions")}
             </DialogTitle>
-            <DialogDescription>Pastikan syarat berikut terpenuhi</DialogDescription>
+            <DialogDescription>{t("autoUpload.igRequirements")}</DialogDescription>
           </DialogHeader>
           <div className="py-3 space-y-3">
             <div className="rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 px-4 py-3 space-y-2">
-              <p className="text-sm font-semibold text-blue-700 dark:text-blue-400">Persyaratan Instagram Business API:</p>
+              <p className="text-sm font-semibold text-blue-700 dark:text-blue-400">{t("autoUpload.igApiTitle")}</p>
               <ol className="text-xs text-blue-600 dark:text-blue-400 space-y-1.5 list-decimal list-inside leading-relaxed">
-                <li>Akun Instagram harus bertipe <strong>Bisnis</strong> atau <strong>Kreator</strong></li>
-                <li>Akun Instagram harus sudah <strong>dihubungkan ke Facebook Page</strong></li>
-                <li>Kamu harus menjadi <strong>Admin</strong> dari Facebook Page tersebut</li>
+                <li>{t("autoUpload.igReq1")}</li>
+                <li>{t("autoUpload.igReq2")}</li>
+                <li>{t("autoUpload.igReq3")}</li>
               </ol>
             </div>
             <div className="rounded-xl bg-muted/60 px-4 py-3 space-y-1">
-              <p className="text-xs font-semibold text-muted-foreground">Belum punya Facebook Page?</p>
+              <p className="text-xs font-semibold text-muted-foreground">{t("autoUpload.noFbPage")}</p>
               <a href="https://facebook.com/pages/create" target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">
-                Buat Facebook Page gratis →
+                {t("autoUpload.createFbPage")}
               </a>
             </div>
             <div className="rounded-xl bg-muted/60 px-4 py-3 space-y-1">
-              <p className="text-xs font-semibold text-muted-foreground">Cara ubah akun ke Bisnis/Kreator:</p>
-              <p className="text-xs text-muted-foreground">Instagram → Pengaturan → Akun → Beralih ke Akun Profesional</p>
+              <p className="text-xs font-semibold text-muted-foreground">{t("autoUpload.switchToBusiness")}</p>
+              <p className="text-xs text-muted-foreground">{t("autoUpload.switchInstructions")}</p>
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setShowIgInstructionDialog(false)}>Batal</Button>
+            <Button variant="outline" onClick={() => setShowIgInstructionDialog(false)}>{t("common.cancel")}</Button>
             <Button onClick={handleProceedOAuth} className="gap-2">
-              <Instagram className="h-4 w-4" /> Lanjut ke Instagram
+              <Instagram className="h-4 w-4" /> {t("autoUpload.connectInstagram")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1095,7 +1114,7 @@ export default function AutoUploadPage() {
               <div className="p-2 bg-red-100 rounded-full">
                 <AlertCircle className="h-5 w-5 text-red-600" />
               </div>
-              <DialogTitle>Error</DialogTitle>
+              <DialogTitle>{t("autoUpload.errorTitle")}</DialogTitle>
             </div>
             <DialogDescription className="pt-2">
               {errorMessage}
@@ -1103,7 +1122,7 @@ export default function AutoUploadPage() {
           </DialogHeader>
           <DialogFooter>
             <Button onClick={() => setShowErrorModal(false)}>
-              Tutup
+              {t("common.close")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1117,7 +1136,7 @@ export default function AutoUploadPage() {
               <div className="p-2 bg-blue-100 rounded-full">
                 <RefreshCw className="h-5 w-5 text-blue-600" />
               </div>
-              <DialogTitle>Hasil Eksekusi</DialogTitle>
+              <DialogTitle>{t("autoUpload.runResultTitle")}</DialogTitle>
             </div>
             <DialogDescription className="pt-2 whitespace-pre-line">
               {runResultMessage}
@@ -1125,7 +1144,7 @@ export default function AutoUploadPage() {
           </DialogHeader>
           <DialogFooter>
             <Button onClick={() => setShowRunResultModal(false)}>
-              Tutup
+              {t("common.close")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1143,26 +1162,26 @@ export default function AutoUploadPage() {
                   <csMeta.Icon className="h-4 w-4" style={{ color: csMeta.color }} />
                 </div>
               )}
-              {csMeta?.name}
+              {t("autoUpload.comingSoonTitle")}
             </DialogTitle>
-            <DialogDescription>Status Integrasi {csMeta?.name}</DialogDescription>
+            <DialogDescription>{t("autoUpload.comingSoonDesc", { platform: csMeta?.name })}</DialogDescription>
           </DialogHeader>
           <div className="py-3 space-y-3">
             <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-4 py-3 flex items-start gap-3">
               <AlertCircle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
               <div className="space-y-1">
-                <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">Status Koneksi</p>
+                <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">{t('autoUpload.statusConnection')}</p>
                 <p className="text-xs text-amber-600 dark:text-amber-500 leading-relaxed">
-                  Integrasi {csMeta?.name} belum tersedia dalam versi ini.
+                  {t('autoUpload.comingSoonIntegration', { platform: csMeta?.name })}
                 </p>
               </div>
             </div>
             <p className="text-xs text-muted-foreground text-center">
-              Platform ini ditampilkan untuk keperluan roadmap. Silakan gunakan Instagram, Facebook, atau platform lain yang sudah terhubung.
+              {t('autoUpload.roadmapNote')}
             </p>
           </div>
           <DialogFooter>
-            <Button className="w-full" onClick={() => setShowComingSoonDialog(false)}>Tutup</Button>
+            <Button className="w-full" onClick={() => setShowComingSoonDialog(false)}>{t("common.close")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

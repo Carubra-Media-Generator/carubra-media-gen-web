@@ -1,6 +1,9 @@
 import { find, updateOne } from '../lib/supabase'
+import { getSupabaseAdmin } from '../lib/supabase'
 
 const WORKER_INTERVAL_MS = Number(process.env.WORKER_INTERVAL_MS) || 10_000
+const STALE_CLEANUP_INTERVAL_MS = 60_000
+const STALE_THRESHOLD_MS = 5 * 60 * 1000
 
 export function startContentAnalysisWorker(intervalMs = WORKER_INTERVAL_MS) {
   if (process.env.VERCEL || process.env.NEXT_RUNTIME === 'edge') {
@@ -51,4 +54,35 @@ export function startContentAnalysisWorker(intervalMs = WORKER_INTERVAL_MS) {
       console.error('[worker] Error', err)
     }
   }, intervalMs)
+
+  // ── Stale strategy job cleanup ────────────────────────────────────────────
+  setInterval(async () => {
+    try {
+      const cutoff = new Date(Date.now() - STALE_THRESHOLD_MS).toISOString()
+      const supabase = await getSupabaseAdmin()
+      const { data: staleJobs, error } = await supabase
+        .from('content_analysis')
+        .select('id')
+        .eq('status', 'processing')
+        .lt('created_at', cutoff)
+        .limit(50)
+
+      if (error) {
+        console.error('[worker] Stale cleanup query error', error)
+        return
+      }
+
+      if (!staleJobs || staleJobs.length === 0) return
+
+      console.log(`[worker] Marking ${staleJobs.length} stale strategy jobs as failed`)
+      for (const job of staleJobs) {
+        await supabase
+          .from('content_analysis')
+          .update({ status: 'failed', updated_at: new Date().toISOString() })
+          .eq('id', job.id)
+      }
+    } catch (err) {
+      console.error('[worker] Stale cleanup error', err)
+    }
+  }, STALE_CLEANUP_INTERVAL_MS)
 }

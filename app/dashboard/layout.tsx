@@ -3,6 +3,7 @@
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/contexts/auth-context"
+import { useLanguage } from "@/contexts/language-context"
 import { DashboardSidebar } from "\@/components/dashboard-sidebar"
 import { DashboardHeader } from "@/components/dashboard-header"
 
@@ -12,6 +13,7 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   const { user, isLoading } = useAuth()
+  const { t } = useLanguage()
   const router = useRouter()
 
   useEffect(() => {
@@ -24,7 +26,7 @@ export default function DashboardLayout({
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="animate-pulse text-primary text-xl font-semibold">
-          Loading...
+          {t("common.loading")}
         </div>
       </div>
     )

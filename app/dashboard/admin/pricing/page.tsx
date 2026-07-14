@@ -5,6 +5,7 @@ import { DollarSign, Plus, Pencil, Trash2, X, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { useAuth } from "@/contexts/auth-context"
+import { useLanguage } from "@/contexts/language-context"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -66,6 +67,7 @@ function PackageModal({
   onClose: () => void
   onSuccess: () => void
 }) {
+  const { t } = useLanguage()
   const [form, setForm] = useState<FormState>(
     pkg
       ? { name: pkg.name, coins: String(pkg.coins), price: pkg.price, description: pkg.description ?? "" }
@@ -94,10 +96,10 @@ function PackageModal({
     }
 
     // validate
-    if (!form.name.trim()) return setError("Nama paket wajib diisi.")
+    if (!form.name.trim()) return setError(t('adminPricing.nameRequired'))
     const coins = Number(form.coins)
-    if (!form.coins || isNaN(coins) || coins <= 0) return setError("Jumlah token harus angka positif.")
-    if (!form.price.trim()) return setError("Harga wajib diisi.")
+    if (!form.coins || isNaN(coins) || coins <= 0) return setError(t('adminPricing.coinsRequired'))
+    if (!form.price.trim()) return setError(t('adminPricing.priceRequired'))
 
     try {
       setSubmitting(true)
@@ -145,14 +147,14 @@ function PackageModal({
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-medium">
-                {isDelete ? "Konfirmasi" : mode === "create" ? "Paket Baru" : "Edit Paket"}
+                {isDelete ? t('adminPricing.confirmLabel') : mode === "create" ? t('adminPricing.newPackage') : t('adminPricing.editPackage')}
               </p>
               <h2 className="text-xl font-bold mt-0.5">
                 {isDelete
-                  ? "Hapus Paket?"
+                  ? t('adminPricing.deleteTitle')
                   : mode === "create"
-                  ? "Tambah Paket Token"
-                  : `Edit "${pkg?.name}"`}
+                  ? t('adminPricing.addTokenPackage')
+                  : `${t('adminPricing.editPackage')} "${pkg?.name}"`}
               </h2>
             </div>
             <button
@@ -166,7 +168,7 @@ function PackageModal({
           {/* delete confirm */}
           {isDelete ? (
             <p className="text-sm text-muted-foreground">
-              Paket <span className="font-semibold text-foreground">{pkg?.name}</span> ({pkg?.coins} token, {pkg?.price}) akan dihapus permanen. Tindakan ini tidak dapat dibatalkan.
+              {t('adminPricing.deleteConfirm', { name: pkg?.name, coins: pkg?.coins, price: pkg?.price })}
             </p>
           ) : (
             /* form */
@@ -174,11 +176,11 @@ function PackageModal({
               <div className="grid grid-cols-2 gap-3">
                 <div className="col-span-2 space-y-1.5">
                   <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Nama Paket
+                    {t('adminPricing.packageName')}
                   </label>
                   <input
                     type="text"
-                    placeholder="Contoh: Paket Starter"
+                    placeholder={t('adminPricing.packageNamePlaceholder')}
                     value={form.name}
                     onChange={set("name")}
                     className="w-full h-10 rounded-xl border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
@@ -186,11 +188,11 @@ function PackageModal({
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Jumlah Token
+                    {t('adminPricing.tokenAmount')}
                   </label>
                   <input
                     type="number"
-                    placeholder="100"
+                    placeholder={t('adminPricing.tokenPlaceholder')}
                     value={form.coins}
                     onChange={set("coins")}
                     min={1}
@@ -199,11 +201,11 @@ function PackageModal({
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Harga
+                    {t('adminPricing.price')}
                   </label>
                   <input
                     type="text"
-                    placeholder="Rp 50.000"
+                    placeholder={t('adminPricing.pricePlaceholder')}
                     value={form.price}
                     onChange={set("price")}
                     className="w-full h-10 rounded-xl border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
@@ -211,10 +213,10 @@ function PackageModal({
                 </div>
                 <div className="col-span-2 space-y-1.5">
                   <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Deskripsi <span className="normal-case font-normal">(opsional)</span>
+                    {t('adminPricing.description')} <span className="normal-case font-normal">{t('adminPricing.descriptionOptional')}</span>
                   </label>
                   <textarea
-                    placeholder="Cocok untuk pengguna baru…"
+                    placeholder={t('adminPricing.descriptionPlaceholder')}
                     value={form.description}
                     onChange={set("description")}
                     rows={2}
@@ -245,18 +247,18 @@ function PackageModal({
               {submitting ? (
                 <span className="flex items-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  {isDelete ? "Menghapus…" : mode === "create" ? "Menyimpan…" : "Mengupdate…"}
+                  {isDelete ? t('adminPricing.deleting') : mode === "create" ? t('adminPricing.saving') : t('adminPricing.updating')}
                 </span>
               ) : isDelete ? (
-                "Ya, Hapus"
+                t('adminPricing.yesDelete')
               ) : mode === "create" ? (
-                "Simpan Paket"
+                t('adminPricing.savePackage')
               ) : (
-                "Simpan Perubahan"
+                t('adminPricing.saveChanges')
               )}
             </Button>
             <Button variant="ghost" className="rounded-xl" onClick={onClose} disabled={submitting}>
-              Batal
+{t('admin.close')}
             </Button>
           </div>
         </div>
@@ -276,6 +278,7 @@ function PackageModal({
 
 export default function AdminPricingPage() {
   const { user, isLoading } = useAuth()
+  const { t } = useLanguage()
   const [packages, setPackages] = useState<PackageOption[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -295,7 +298,7 @@ export default function AdminPricingPage() {
       const data = await apiFetch<{ packages: PackageOption[] }>("/api/admin/packages")
       setPackages(data.packages ?? [])
     } catch (err: any) {
-      setError(err.message ?? "Tidak dapat memuat paket")
+      setError(err.message ?? t('adminPricing.loadError'))
     } finally {
       setLoading(false)
     }
@@ -314,7 +317,7 @@ export default function AdminPricingPage() {
   if (isLoading || !user) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center text-base text-muted-foreground">
-        Memuat pricing...
+        {t('adminPricing.loading')}
       </div>
     )
   }
@@ -334,17 +337,17 @@ export default function AdminPricingPage() {
       <div className="space-y-6">
         {/* Header */}
         <div>
-          <p className="text-sm uppercase tracking-[0.24em] text-muted-foreground">Admin Console</p>
-          <h1 className="text-3xl font-bold">Manajemen Koin & Pricing</h1>
+          <p className="text-sm uppercase tracking-[0.24em] text-muted-foreground">{t('admin.console')}</p>
+          <h1 className="text-3xl font-bold">{t('adminPricing.title')}</h1>
           <p className="mt-2 text-muted-foreground max-w-2xl">
-            Kelola paket koin dan harga yang tersedia untuk pengguna.
+            {t('adminPricing.description')}
           </p>
         </div>
 
         {error && (
           <div className="rounded-3xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive flex items-center justify-between gap-4">
             <span>{error}</span>
-            <button onClick={() => setError(null)} className="font-medium hover:underline">Tutup</button>
+            <button onClick={() => setError(null)} className="font-medium hover:underline">{t('adminPricing.cancel')}</button>
           </div>
         )}
 
@@ -355,30 +358,30 @@ export default function AdminPricingPage() {
               <div className="flex items-center gap-3">
                 <DollarSign className="h-6 w-6 text-amber-500" />
                 <div>
-                  <p className="text-sm font-semibold">Paket Koin</p>
+                  <p className="text-sm font-semibold">{t('adminPricing.coinPackages')}</p>
                   <p className="text-xs text-muted-foreground">
-                    {packages.length} paket aktif
+                    {t('adminPricing.activePackages', { count: packages.length })}
                   </p>
                 </div>
               </div>
               <Button onClick={openCreate} disabled={loading}>
-                <Plus className="mr-2 h-4 w-4" /> Tambah Paket
+                <Plus className="mr-2 h-4 w-4" /> {t('adminPricing.addPackage')}
               </Button>
             </div>
 
             {/* package grid */}
             {loading ? (
               <div className="flex items-center justify-center py-12 text-sm text-muted-foreground gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" /> Memuat paket…
+                <Loader2 className="h-4 w-4 animate-spin" /> {t('adminPricing.loadingPackages')}
               </div>
             ) : packages.length === 0 ? (
               <div className="rounded-3xl border border-dashed border-border bg-slate-50 p-8 text-center space-y-2">
-                <p className="font-semibold text-foreground">Belum ada paket</p>
+                <p className="font-semibold text-foreground">{t('adminPricing.noPackages')}</p>
                 <p className="text-sm text-muted-foreground">
-                  Tambahkan paket pertama untuk mulai menjual token ke pengguna.
+                  {t('adminPricing.noPackagesDesc')}
                 </p>
                 <Button variant="outline" size="sm" className="mt-2" onClick={openCreate}>
-                  <Plus className="mr-1.5 h-3.5 w-3.5" /> Tambah Sekarang
+                  <Plus className="mr-1.5 h-3.5 w-3.5" /> {t('adminPricing.addNow')}
                 </Button>
               </div>
             ) : (
@@ -393,21 +396,21 @@ export default function AdminPricingPage() {
                       <button
                         onClick={() => openEdit(pkg)}
                         className="rounded-xl p-1.5 bg-white border border-border text-muted-foreground hover:text-foreground hover:border-amber-400 transition-colors shadow-sm"
-                        title="Edit"
+                        title={t('adminPricing.edit')}
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
                       <button
                         onClick={() => openDelete(pkg)}
                         className="rounded-xl p-1.5 bg-white border border-border text-muted-foreground hover:text-destructive hover:border-destructive/40 transition-colors shadow-sm"
-                        title="Hapus"
+                        title={t('adminPricing.delete')}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
 
                     <p className="text-xs uppercase tracking-[0.18em] text-amber-600 font-medium mb-1">
-                      {pkg.coins} token
+                      {t('adminPricing.tokens', { coins: pkg.coins })}
                     </p>
                     <p className="font-semibold text-foreground">{pkg.name}</p>
                     <p className="mt-2 text-2xl font-bold">{pkg.price}</p>
@@ -420,7 +423,7 @@ export default function AdminPricingPage() {
                     {/* bottom actions visible always on mobile */}
                     <div className="mt-4 flex gap-2 sm:hidden">
                       <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => openEdit(pkg)}>
-                        <Pencil className="mr-1 h-3 w-3" /> Edit
+                        <Pencil className="mr-1 h-3 w-3" /> {t('adminPricing.edit')}
                       </Button>
                       <Button size="sm" variant="outline" className="text-xs text-destructive hover:text-destructive" onClick={() => openDelete(pkg)}>
                         <Trash2 className="h-3 w-3" />
@@ -432,7 +435,7 @@ export default function AdminPricingPage() {
             )}
 
             <p className="text-xs text-muted-foreground">
-              Paket disimpan ke Supabase melalui API admin. Gunakan halaman Membership untuk melihat ringkasan transaksi.
+              {t('adminPricing.footerNote')}
             </p>
           </CardContent>
         </Card>

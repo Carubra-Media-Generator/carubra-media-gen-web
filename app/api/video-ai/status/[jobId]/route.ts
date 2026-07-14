@@ -449,7 +449,6 @@ export async function GET(
             status: 'completed',
             video_url: videoUrl ?? null,
             ...(correctRatio ? { aspect_ratio: correctRatio } : {}),
-            ...(dims ? { video_width: dims.width, video_height: dims.height } : {}),
             ...(storageMetadata || {}),
           }
         )
