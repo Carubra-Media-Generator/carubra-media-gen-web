@@ -14,6 +14,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
+import { StrategyPreview } from "@/app/dashboard/content-analytics/page"
 
 type GeneratedContent = {
   id: string
@@ -200,6 +201,13 @@ export default function AdminContentPage() {
   const [selectedContentId, setSelectedContentId] = useState<string | null>(null)
   const [selectedContentTitle, setSelectedContentTitle] = useState("")
   const [selectedContent, setSelectedContent] = useState<GeneratedContent | null>(null)
+  
+  // Trend chart labels for strategy preview
+  const trendLabels = Array.from({ length: 30 }, (_, i) => {
+    const d = new Date()
+    d.setDate(d.getDate() - (29 - i))
+    return `${d.getDate()}/${d.getMonth() + 1}`
+  })
 
   useEffect(() => {
     if (!isLoading) {
@@ -586,142 +594,190 @@ export default function AdminContentPage() {
 
       {/* View Content Modal */}
       <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
-        <DialogContent className="max-w-3xl w-full p-0 overflow-hidden rounded-2xl gap-0">
-          <div className="flex items-center justify-between px-6 py-4 border-b bg-muted/30">
-            <div className="flex items-center gap-3">
-              <DialogTitle className="text-base font-semibold line-clamp-1 max-w-sm">
-                {selectedContent?.title || t('adminContent.untitled')}
-              </DialogTitle>
-              {selectedContent?.metadata?.status && (
-                <Badge
-                  variant={selectedContent.metadata.status === 'completed' ? 'default' : selectedContent.metadata.status === 'failed' ? 'destructive' : 'secondary'}
-                  className="text-xs gap-1 flex-shrink-0"
-                >
-                  {selectedContent.metadata.status === 'completed' && <CheckCircle2 className="h-3 w-3" />}
-                  {selectedContent.metadata.status === 'failed' && <XCircle className="h-3 w-3" />}
-                  {selectedContent.metadata.status === 'processing' && <Loader2 className="h-3 w-3 animate-spin" />}
-                  {selectedContent.metadata.status === 'scheduled' && <Clock className="h-3 w-3" />}
-                  {selectedContent.metadata.status.charAt(0).toUpperCase() + selectedContent.metadata.status.slice(1)}
-                </Badge>
-              )}
-            </div>
-          </div>
+        <DialogContent className="max-w-4xl w-full p-0 overflow-hidden rounded-2xl gap-0">
+          {(() => {
+            // Strategy content type: render full-width strategy preview
+            if (selectedContent?.metadata?.content_type === 'strategy') {
+              // Parse strategy data from content field if it's a JSON string
+              let strategyResult = selectedContent?.metadata?.result
+              if (!strategyResult && selectedContent?.content) {
+                try {
+                  strategyResult = JSON.parse(selectedContent.content)
+                } catch (e) {
+                  // If parsing fails, fall through to default view
+                  strategyResult = null
+                }
+              }
+              if (strategyResult) {
+                return (
+                  <>
+                    <div className="flex items-center justify-between px-6 py-4 border-b bg-muted/30">
+                      <div className="flex items-center gap-3">
+                        <DialogTitle className="text-base font-semibold line-clamp-1 max-w-sm">
+                          {selectedContent?.title || t('adminContent.untitled')}
+                        </DialogTitle>
+                        {selectedContent?.metadata?.status && (
+                          <Badge
+                            variant={selectedContent.metadata.status === 'completed' ? 'default' : selectedContent.metadata.status === 'failed' ? 'destructive' : 'secondary'}
+                            className="text-xs gap-1 flex-shrink-0"
+                          >
+                            {selectedContent.metadata.status === 'completed' && <CheckCircle2 className="h-3 w-3" />}
+                            {selectedContent.metadata.status === 'failed' && <XCircle className="h-3 w-3" />}
+                            {selectedContent.metadata.status === 'processing' && <Loader2 className="h-3 w-3 animate-spin" />}
+                            {selectedContent.metadata.status === 'scheduled' && <Clock className="h-3 w-3" />}
+                            {selectedContent.metadata.status.charAt(0).toUpperCase() + selectedContent.metadata.status.slice(1)}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    <div className="p-6 max-h-[75vh] overflow-y-auto">
+                      <StrategyPreview result={strategyResult} trendLabels={trendLabels} />
+                    </div>
+                  </>
+                )
+              }
+            }
+            // Default: render media preview (image/video/legacy)
+            return (
+              <>
+                <div className="flex items-center justify-between px-6 py-4 border-b bg-muted/30">
+                  <div className="flex items-center gap-3">
+                    <DialogTitle className="text-base font-semibold line-clamp-1 max-w-sm">
+                      {selectedContent?.title || t('adminContent.untitled')}
+                    </DialogTitle>
+                    {selectedContent?.metadata?.status && (
+                      <Badge
+                        variant={selectedContent.metadata.status === 'completed' ? 'default' : selectedContent.metadata.status === 'failed' ? 'destructive' : 'secondary'}
+                        className="text-xs gap-1 flex-shrink-0"
+                      >
+                        {selectedContent.metadata.status === 'completed' && <CheckCircle2 className="h-3 w-3" />}
+                        {selectedContent.metadata.status === 'failed' && <XCircle className="h-3 w-3" />}
+                        {selectedContent.metadata.status === 'processing' && <Loader2 className="h-3 w-3 animate-spin" />}
+                        {selectedContent.metadata.status === 'scheduled' && <Clock className="h-3 w-3" />}
+                        {selectedContent.metadata.status.charAt(0).toUpperCase() + selectedContent.metadata.status.slice(1)}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
 
-          <div className="grid md:grid-cols-2 gap-0 max-h-[75vh] overflow-y-auto">
-            {/* Left: Preview */}
-            <div className="bg-black/10 dark:bg-black/40 flex items-center justify-center p-4 min-h-[280px]">
-              {selectedContent?.metadata?.image_url ? (
-                <img 
-                  src={selectedContent.metadata.image_url} 
-                  alt={selectedContent.title} 
-                  className="rounded-xl object-contain max-h-[420px] w-full shadow-lg" 
-                />
-              ) : selectedContent?.metadata?.video_url ? (
-                <video 
-                  src={selectedContent.metadata.video_url} 
-                  controls 
-                  className="rounded-xl w-full max-h-[420px] shadow-lg object-contain"
-                />
-              ) : selectedContent?.metadata?.status === 'processing' ? (
-                <div className="flex flex-col items-center gap-3 text-muted-foreground">
-                  <Loader2 className="h-10 w-10 animate-spin text-primary" />
-                  <p className="text-sm">Memproses...</p>
-                </div>
-              ) : selectedContent?.metadata?.status === 'failed' ? (
-                <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                  <XCircle className="h-10 w-10 opacity-30" />
-                  <p className="text-sm">Gagal</p>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                  <FileText className="h-10 w-10 opacity-30" />
-                  <p className="text-sm">Tidak ada preview</p>
-                </div>
-              )}
-            </div>
+                <div className="grid md:grid-cols-2 gap-0 max-h-[75vh] overflow-y-auto">
+                  {/* Left: Preview */}
+                  <div className="bg-black/10 dark:bg-black/40 flex items-center justify-center p-4 min-h-[280px]">
+                    {selectedContent?.metadata?.image_url ? (
+                      <img 
+                        src={selectedContent.metadata.image_url} 
+                        alt={selectedContent.title} 
+                        className="rounded-xl object-contain max-h-[420px] w-full shadow-lg" 
+                      />
+                    ) : selectedContent?.metadata?.video_url ? (
+                      <video 
+                        src={selectedContent.metadata.video_url} 
+                        controls 
+                        className="rounded-xl w-full max-h-[420px] shadow-lg object-contain"
+                      />
+                    ) : selectedContent?.metadata?.status === 'processing' ? (
+                      <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                        <p className="text-sm">Memproses...</p>
+                      </div>
+                    ) : selectedContent?.metadata?.status === 'failed' ? (
+                      <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                        <XCircle className="h-10 w-10 opacity-30" />
+                        <p className="text-sm">Gagal</p>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                        <FileText className="h-10 w-10 opacity-30" />
+                        <p className="text-sm">Tidak ada preview</p>
+                      </div>
+                    )}
+                  </div>
 
-            {/* Right: Info */}
-            <div className="flex flex-col p-5 gap-4 overflow-y-auto">
-              {/* Information Grid */}
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="rounded-lg bg-muted/50 px-3 py-2">
-                  <p className="text-muted-foreground mb-0.5">Tipe Konten</p>
-                  <p className="font-medium capitalize">{selectedContent?.metadata?.content_type || 'Legacy'}</p>
-                </div>
-                <div className="rounded-lg bg-muted/50 px-3 py-2">
-                  <p className="text-muted-foreground mb-0.5">Status</p>
-                  <p className="font-medium capitalize">{selectedContent?.metadata?.status || 'Processing'}</p>
-                </div>
-                {selectedContent?.metadata?.resolution && (
-                  <div className="rounded-lg bg-muted/50 px-3 py-2">
-                    <p className="text-muted-foreground mb-0.5">Resolusi</p>
-                    <p className="font-medium">{selectedContent.metadata.resolution}</p>
-                  </div>
-                )}
-                {selectedContent?.metadata?.width && selectedContent?.metadata?.height && (
-                  <div className="rounded-lg bg-muted/50 px-3 py-2">
-                    <p className="text-muted-foreground mb-0.5">Dimensi</p>
-                    <p className="font-medium">{selectedContent.metadata.width}×{selectedContent.metadata.height}px</p>
-                  </div>
-                )}
-                {selectedContent?.metadata?.aspect_ratio && (
-                  <div className="rounded-lg bg-muted/50 px-3 py-2">
-                    <p className="text-muted-foreground mb-0.5">Aspect Ratio</p>
-                    <p className="font-medium">{selectedContent.metadata.aspect_ratio}</p>
-                  </div>
-                )}
-                {selectedContent?.metadata?.duration && (
-                  <div className="rounded-lg bg-muted/50 px-3 py-2">
-                    <p className="text-muted-foreground mb-0.5">Durasi</p>
-                    <p className="font-medium">{selectedContent.metadata.duration}s</p>
-                  </div>
-                )}
-                {selectedContent?.metadata?.coin_cost && (
-                  <div className="rounded-lg bg-muted/50 px-3 py-2">
-                    <p className="text-muted-foreground mb-0.5">Biaya Koin</p>
-                    <p className="font-medium">{selectedContent.metadata.coin_cost} koin</p>
-                  </div>
-                )}
-                <div className="rounded-lg bg-muted/50 px-3 py-2">
-                  <p className="text-muted-foreground mb-0.5">Dibuat</p>
-                  <p className="font-medium">{formatDate(selectedContent?.created_at)}</p>
-                </div>
-                {selectedContent?.updated_at && (
-                  <div className="rounded-lg bg-muted/50 px-3 py-2">
-                    <p className="text-muted-foreground mb-0.5">Diupdate</p>
-                    <p className="font-medium">{formatDate(selectedContent.updated_at)}</p>
-                  </div>
-                )}
-              </div>
+                  {/* Right: Info */}
+                  <div className="flex flex-col p-5 gap-4 overflow-y-auto">
+                    {/* Information Grid */}
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="rounded-lg bg-muted/50 px-3 py-2">
+                        <p className="text-muted-foreground mb-0.5">Tipe Konten</p>
+                        <p className="font-medium capitalize">{selectedContent?.metadata?.content_type || 'Legacy'}</p>
+                      </div>
+                      <div className="rounded-lg bg-muted/50 px-3 py-2">
+                        <p className="text-muted-foreground mb-0.5">Status</p>
+                        <p className="font-medium capitalize">{selectedContent?.metadata?.status || 'Processing'}</p>
+                      </div>
+                      {selectedContent?.metadata?.resolution && (
+                        <div className="rounded-lg bg-muted/50 px-3 py-2">
+                          <p className="text-muted-foreground mb-0.5">Resolusi</p>
+                          <p className="font-medium">{selectedContent.metadata.resolution}</p>
+                        </div>
+                      )}
+                      {selectedContent?.metadata?.width && selectedContent?.metadata?.height && (
+                        <div className="rounded-lg bg-muted/50 px-3 py-2">
+                          <p className="text-muted-foreground mb-0.5">Dimensi</p>
+                          <p className="font-medium">{selectedContent.metadata.width}×{selectedContent.metadata.height}px</p>
+                        </div>
+                      )}
+                      {selectedContent?.metadata?.aspect_ratio && (
+                        <div className="rounded-lg bg-muted/50 px-3 py-2">
+                          <p className="text-muted-foreground mb-0.5">Aspect Ratio</p>
+                          <p className="font-medium">{selectedContent.metadata.aspect_ratio}</p>
+                        </div>
+                      )}
+                      {selectedContent?.metadata?.duration && (
+                        <div className="rounded-lg bg-muted/50 px-3 py-2">
+                          <p className="text-muted-foreground mb-0.5">Durasi</p>
+                          <p className="font-medium">{selectedContent.metadata.duration}s</p>
+                        </div>
+                      )}
+                      {selectedContent?.metadata?.coin_cost && (
+                        <div className="rounded-lg bg-muted/50 px-3 py-2">
+                          <p className="text-muted-foreground mb-0.5">Biaya Koin</p>
+                          <p className="font-medium">{selectedContent.metadata.coin_cost} koin</p>
+                        </div>
+                      )}
+                      <div className="rounded-lg bg-muted/50 px-3 py-2">
+                        <p className="text-muted-foreground mb-0.5">Dibuat</p>
+                        <p className="font-medium">{formatDate(selectedContent?.created_at)}</p>
+                      </div>
+                      {selectedContent?.updated_at && (
+                        <div className="rounded-lg bg-muted/50 px-3 py-2">
+                          <p className="text-muted-foreground mb-0.5">Diupdate</p>
+                          <p className="font-medium">{formatDate(selectedContent.updated_at)}</p>
+                        </div>
+                      )}
+                    </div>
 
-              {/* Content/Prompt */}
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground mb-1.5">Prompt / Konten</p>
-                <p className="text-sm leading-relaxed bg-muted/40 rounded-lg px-3 py-2 whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
-                  {selectedContent?.content || t('adminContent.noContent')}
-                </p>
-              </div>
+                    {/* Content/Prompt */}
+                    <div>
+                      <p className="text-xs font-semibold text-muted-foreground mb-1.5">Prompt / Konten</p>
+                      <p className="text-sm leading-relaxed bg-muted/40 rounded-lg px-3 py-2 whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
+                        {selectedContent?.content || t('adminContent.noContent')}
+                      </p>
+                    </div>
 
-              {/* Actions */}
-              <div className="mt-auto flex flex-col gap-2">
-                {selectedContent?.metadata?.image_url && (
-                  <Button size="sm" variant="outline" className="w-full gap-1.5"
-                    onClick={() => selectedContent.metadata?.image_url && window.open(selectedContent.metadata.image_url, '_blank')}>
-                    <Eye className="h-3.5 w-3.5" /> Buka Gambar
-                  </Button>
-                )}
-                {selectedContent?.metadata?.video_url && (
-                  <Button size="sm" variant="outline" className="w-full gap-1.5"
-                    onClick={() => selectedContent.metadata?.video_url && window.open(selectedContent.metadata.video_url, '_blank')}>
-                    <Eye className="h-3.5 w-3.5" /> Buka Video
-                  </Button>
-                )}
-                <Button size="sm" onClick={() => setShowViewModal(false)}>
-                  Tutup
-                </Button>
-              </div>
-            </div>
-          </div>
+                    {/* Actions */}
+                    <div className="mt-auto flex flex-col gap-2">
+                      {selectedContent?.metadata?.image_url && (
+                        <Button size="sm" variant="outline" className="w-full gap-1.5"
+                          onClick={() => selectedContent.metadata?.image_url && window.open(selectedContent.metadata.image_url, '_blank')}>
+                          <Eye className="h-3.5 w-3.5" /> Buka Gambar
+                        </Button>
+                      )}
+                      {selectedContent?.metadata?.video_url && (
+                        <Button size="sm" variant="outline" className="w-full gap-1.5"
+                          onClick={() => selectedContent.metadata?.video_url && window.open(selectedContent.metadata.video_url, '_blank')}>
+                          <Eye className="h-3.5 w-3.5" /> Buka Video
+                        </Button>
+                      )}
+                      <Button size="sm" onClick={() => setShowViewModal(false)}>
+                        Tutup
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )
+          })()}
         </DialogContent>
       </Dialog>
     </div>

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminUser, isAdminUser } from '@/lib/admin'
-import { find } from '@/lib/supabase'
+import { getSupabaseAdmin } from '@/lib/supabase'
+
+const DEFAULT_LIMIT = 20
 
 export async function GET(req: NextRequest) {
   try {
@@ -9,16 +11,59 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    // Fetch from both images and videos tables with individual error handling
-    const [images, videos, generatedContents] = await Promise.allSettled([
-      find('images', {}, { orderBy: 'created_at', ascending: false, limit: 200 }).catch(() => []),
-      find('videos', {}, { orderBy: 'created_at', ascending: false, limit: 200 }).catch(() => []),
-      find('generated_contents', {}, { orderBy: 'created_at', ascending: false, limit: 200 }).catch(() => []),
+    const { searchParams } = new URL(req.url)
+    const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10))
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') ?? String(DEFAULT_LIMIT), 10)))
+    const offset = (page - 1) * limit
+
+    const supabase = await getSupabaseAdmin()
+
+    // Fetch only the columns actually needed — avoids transferring large image/video blobs
+    // and prevents statement timeouts on the images table
+    const [imagesResult, videosResult, generatedContentsResult] = await Promise.allSettled([
+      supabase
+        .from('images')
+        .select('id, user_id, prompt, status, coins_used, image_url, width, height, created_at, updated_at', {
+          count: 'exact',
+        })
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1),
+
+      supabase
+        .from('videos')
+        .select('id, user_id, prompt, status, coins_used, video_url, resolution, aspect_ratio, duration, job_id, created_at, updated_at', {
+          count: 'exact',
+        })
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1),
+
+      supabase
+        .from('generated_contents')
+        .select('id, user_id, title, content, metadata, created_at, updated_at', {
+          count: 'exact',
+        })
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1),
     ])
 
-    const imagesData = images.status === 'fulfilled' ? images.value : []
-    const videosData = videos.status === 'fulfilled' ? videos.value : []
-    const generatedContentsData = generatedContents.status === 'fulfilled' ? generatedContents.value : []
+    const imagesData =
+      imagesResult.status === 'fulfilled' ? (imagesResult.value.data ?? []) : []
+    const imagesCount =
+      imagesResult.status === 'fulfilled' ? (imagesResult.value.count ?? 0) : 0
+
+    const videosData =
+      videosResult.status === 'fulfilled' ? (videosResult.value.data ?? []) : []
+    const videosCount =
+      videosResult.status === 'fulfilled' ? (videosResult.value.count ?? 0) : 0
+
+    const generatedContentsData =
+      generatedContentsResult.status === 'fulfilled'
+        ? (generatedContentsResult.value.data ?? [])
+        : []
+    const generatedContentsCount =
+      generatedContentsResult.status === 'fulfilled'
+        ? (generatedContentsResult.value.count ?? 0)
+        : 0
 
     // Transform images to unified format
     const transformedImages = imagesData.map((img: any) => ({
@@ -82,9 +127,23 @@ export async function GET(req: NextRequest) {
       return dateB - dateA
     })
 
-    return NextResponse.json({ contents: allContents.slice(0, 200) })
+    const total = imagesCount + videosCount + generatedContentsCount
+
+    return NextResponse.json({
+      contents: allContents.slice(0, limit),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasMore: page * limit < total,
+      },
+    })
   } catch (error: any) {
     console.error('[GET /api/admin/contents]', error)
-    return NextResponse.json({ error: error.message ?? 'Unable to load contents' }, { status: 500 })
+    return NextResponse.json(
+      { error: error.message ?? 'Unable to load contents' },
+      { status: 500 }
+    )
   }
 }

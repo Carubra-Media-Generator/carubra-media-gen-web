@@ -25,15 +25,6 @@ import {
   Legend as RechartsLegend,
 } from "recharts"
 
-type GeneratedContent = {
-  id: string
-  user_id: string
-  title: string
-  content: string
-  metadata?: any
-  created_at?: string
-}
-
 type DashboardStats = {
   totalUsers: number
   adminCount: number
@@ -60,6 +51,8 @@ type AdminMonitoring = {
     totalTokens: number
     latestQuotaRemaining: number | null
     latestUsageAt: string | null
+    successfulRequests: number
+    failedRequests: number
   }
 }
 
@@ -87,21 +80,6 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
     throw new Error((payload as any).error ?? `HTTP ${res.status}`)
   }
   return payload as T
-}
-
-function formatDate(value?: string) {
-  if (!value) return "-"
-  try {
-    return new Date(value).toLocaleString("id-ID", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    })
-  } catch {
-    return value
-  }
 }
 
 function buildMonthlyTrend(logs?: AiUsageLog[]) {
@@ -182,16 +160,10 @@ export default function AdminDashboardPage() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
   const [stats, setStats] = useState<DashboardStats | null>(null)
-  const [contents, setContents] = useState<GeneratedContent[]>([])
   const [monitoring, setMonitoring] = useState<AdminMonitoring | null>(null)
   const [monthlyTrend, setMonthlyTrend] = useState<{ labels: string[]; totals: number[] }>({ labels: [], totals: [] })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  
-  // Modal states
-  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false)
-  const [modalMessage, setModalMessage] = useState("")
-  const [selectedContentId, setSelectedContentId] = useState<string | null>(null)
 
   const { t } = useLanguage()
   const isAdmin = user?.role?.toString().toLowerCase().includes("admin")
@@ -212,14 +184,13 @@ export default function AdminDashboardPage() {
     setLoading(true)
     setError(null)
     try {
-      const [dashboardData, contentsData, monitoringData] = await Promise.all([
+      // Only fetch dashboard stats and monitoring — contents are on a separate page
+      const [dashboardData, monitoringData] = await Promise.all([
         apiFetch<DashboardStats>("/api/admin/dashboard"),
-        apiFetch<{ contents: GeneratedContent[] }>("/api/admin/contents"),
         apiFetch<AdminMonitoring>("/api/admin/monitoring"),
       ])
 
       setStats(dashboardData)
-      setContents(contentsData.contents)
       setMonitoring(monitoringData)
       setMonthlyTrend(buildMonthlyTrend(monitoringData.aiUsageLogs))
     } catch (err: any) {
@@ -227,23 +198,6 @@ export default function AdminDashboardPage() {
       setError(err.message ?? t('admin.fetchError'))
     } finally {
       setLoading(false)
-    }
-  }
-
-  const handleDeleteContent = async (contentId: string) => {
-    setSelectedContentId(contentId)
-    setModalMessage(t('admin.confirmDeleteContent'))
-    setShowDeleteConfirmModal(true)
-  }
-
-  const confirmDeleteContent = async () => {
-    if (!selectedContentId) return
-    try {
-      await apiFetch(`/api/admin/contents/${selectedContentId}`, { method: "DELETE" })
-      setContents((prev) => prev.filter((item) => item.id !== selectedContentId))
-      setShowDeleteConfirmModal(false)
-    } catch (err: any) {
-      setError(err.message)
     }
   }
 
@@ -428,10 +382,16 @@ export default function AdminDashboardPage() {
                 color="bg-purple-500/10 text-purple-600 dark:text-purple-400"
               />
               <KPICard
-                icon={TrendingUp}
-                title={t('admin.lastQuota')}
-                value={monitoring?.aiUsageSummary.latestQuotaRemaining ?? "—"}
+                icon={CheckCircle}
+                title={t('admin.successfulRequests')}
+                value={monitoring?.aiUsageSummary.successfulRequests ?? "—"}
                 color="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+              />
+              <KPICard
+                icon={XCircle}
+                title={t('admin.failedRequests')}
+                value={monitoring?.aiUsageSummary.failedRequests ?? "—"}
+                color="bg-red-500/10 text-red-600 dark:text-red-400"
               />
               <KPICard
                 icon={Clock}
@@ -534,31 +494,6 @@ export default function AdminDashboardPage() {
           {error}
         </div>
       )}
-
-      {/* Delete Confirmation Modal */}
-      <Dialog open={showDeleteConfirmModal} onOpenChange={setShowDeleteConfirmModal}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-red-100 rounded-full">
-                <AlertTriangle className="h-5 w-5 text-red-600" />
-              </div>
-              <DialogTitle>{t('admin.deleteContent')}</DialogTitle>
-            </div>
-            <DialogDescription className="pt-2">
-              {modalMessage}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDeleteConfirmModal(false)}>
-              {t('admin.cancel')}
-            </Button>
-            <Button variant="destructive" onClick={confirmDeleteContent}>
-              {t('admin.confirmDelete')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
