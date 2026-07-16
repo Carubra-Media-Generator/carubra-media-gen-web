@@ -141,6 +141,14 @@ export async function POST(req: NextRequest) {
           // ─── Image-to-Image: MUST use /v1/images/edits with multipart/form-data ───
           // The /v1/images/generations endpoint does NOT support image conditioning.
           // Sending init_image as JSON is silently ignored by all major providers.
+          const editUrl = `${IMAGE_API_URL}/v1/images/edits`
+          console.log(`[image-ai] ── DEBUG: Image-to-Image request ──`)
+          console.log(`[image-ai] Endpoint:       /v1/images/edits`)
+          console.log(`[image-ai] Model:          ${IMAGE_MODEL}`)
+          console.log(`[image-ai] API base URL:   ${IMAGE_API_URL}`)
+          console.log(`[image-ai] Request URL:    ${editUrl}`)
+          console.log(`[image-ai] Image size:     ${Math.round(init_image.length * 3 / 4)} bytes (approx decoded)`)
+          console.log(`[image-ai] Prompt length:  ${prompt.length} chars`)
           console.log(`[image-ai] Using /v1/images/edits endpoint (multipart/form-data)`)
           console.log(`[image-ai] init_image base64 length: ${init_image.length}`)
 
@@ -158,9 +166,9 @@ export async function POST(req: NextRequest) {
           const appliedStrength = typeof strength === 'number' ? strength : 0.65
           form.append('strength', String(appliedStrength))
 
-          console.log(`[image-ai] Strength: ${appliedStrength}`)
+          console.log(`[image-ai] Strength:       ${appliedStrength}`)
 
-          response = await fetch(`${IMAGE_API_URL}/v1/images/edits`, {
+          response = await fetch(editUrl, {
             method: 'POST',
             headers: {
               Authorization: `Bearer ${IMAGE_API_KEY}`,
@@ -200,6 +208,8 @@ export async function POST(req: NextRequest) {
 
       const rawText = await response.text()
       console.log(`[image-ai] Response status: ${response.status}`)
+      console.log(`[image-ai] Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`)
+      console.log(`[image-ai] Response body (raw): ${rawText.slice(0, 2000)}`)
 
       let carubraData: any
       try {
@@ -208,12 +218,14 @@ export async function POST(req: NextRequest) {
         carubraData = rawText
       }
 
-      console.log('[image-ai] Provider response body:', carubraData)
+      console.log('[image-ai] Provider response body (parsed):', carubraData)
 
       if (!response.ok) {
         // If /v1/images/edits is unsupported (404/405), fall back to /v1/images/generations
         // with init_image in the JSON body (legacy behavior)
-        if (isImg2Img && (response.status === 404 || response.status === 405)) {
+        // NOTE: 502 is included here because LiteLLM returns 502 when the upstream
+        // provider does not support /v1/images/edits (e.g. Vertex AI Imagen models).
+        if (isImg2Img && (response.status === 404 || response.status === 405 || response.status === 502)) {
           console.warn(`[image-ai] /v1/images/edits not supported (${response.status}), falling back to /v1/images/generations with init_image field`)
 
           const fallbackPayload: Record<string, unknown> = {
