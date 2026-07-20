@@ -8,15 +8,15 @@ import { getUserFromRequest } from '@/middleware/auth'
 // Width x Height as supported by most providers
 const VALID_SIZES: { w: number; h: number }[] = [
   { w: 1024, h: 1024 }, // 1:1 Square
-  { w: 1280, h: 720  }, // 16:9 Widescreen
-  { w: 720,  h: 1280 }, // 9:16 Vertical
-  { w: 1024, h: 768  }, // 4:3 Standard
-  { w: 768,  h: 1024 }, // 3:4 Portrait
+  { w: 1280, h: 720 }, // 16:9 Widescreen
+  { w: 720, h: 1280 }, // 9:16 Vertical
+  { w: 1024, h: 768 }, // 4:3 Standard
+  { w: 768, h: 1024 }, // 3:4 Portrait
   { w: 1440, h: 1440 }, // 2K Square
   { w: 1920, h: 1080 }, // 2K Widescreen
   { w: 1080, h: 1920 }, // 2K Vertical
-  { w: 1152, h: 864  }, // fallback
-  { w: 864,  h: 1152 }, // fallback
+  { w: 1152, h: 864 }, // fallback
+  { w: 864, h: 1152 }, // fallback
 ]
 
 /**
@@ -417,13 +417,13 @@ export async function POST(req: NextRequest) {
         throw dbError
       }
 
-      return NextResponse.json({ image: { ...completedImage, imageUrl }, coins: remainingCoins }, { status: 201 })
+      return NextResponse.json({ image: { ...completedImage, imageUrl: finalImageUrl }, coins: remainingCoins }, { status: 201 })
     } catch (error: any) {
       newImage.status = 'failed'
       console.error('[image-ai] Error:', error)
       try {
         await insert('images', newImage)
-      } catch {}
+      } catch { }
 
       const isConnectError =
         error?.cause?.code === 'UND_ERR_CONNECT_TIMEOUT' ||

@@ -89,6 +89,7 @@ function DetailModal({
   const [editCaption, setEditCaption] = useState("")
   const [activeTab, setActiveTab] = useState<"view" | "edit">("view")
   const [shareSuccess, setShareSuccess] = useState<string | null>(null)
+  const [showFullPrompt, setShowFullPrompt] = useState(false)
 
   useEffect(() => {
     if (item) {
@@ -96,6 +97,7 @@ function DetailModal({
       setEditCaption(item.caption)
       setActiveTab("view")
       setShareSuccess(null)
+      setShowFullPrompt(false)
     }
   }, [item])
 
@@ -119,13 +121,20 @@ function DetailModal({
     a.click()
   }
 
+  const promptText = item.prompt || ""
+  const isLongPrompt = promptText.length > 200
+  const displayPrompt = isLongPrompt && !showFullPrompt 
+    ? promptText.slice(0, 200) + "..." 
+    : promptText
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl w-full p-0 overflow-hidden rounded-2xl gap-0">
-        <div className="flex items-center justify-between px-6 py-4 border-b bg-muted/30">
-          <div className="flex items-center gap-3">
-            <DialogTitle className="text-base font-semibold line-clamp-1 max-w-sm">
-              {item.prompt}
+      <DialogContent className="max-w-4xl w-full p-0 overflow-hidden rounded-2xl gap-0 max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b bg-muted/30 sticky top-0 z-10 backdrop-blur-sm">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <DialogTitle className="text-base font-semibold line-clamp-1">
+              {promptText.slice(0, 60)}
             </DialogTitle>
             <Badge
               variant={item.status === "success" ? "default" : item.status === "failed" ? "destructive" : "secondary"}
@@ -137,168 +146,199 @@ function DetailModal({
               {item.status === "success" ? t("videoAi.completed") : item.status === "failed" ? t("videoAi.failed") : t("videoAi.processing")}
             </Badge>
           </div>
+          <div className="flex rounded-lg bg-muted p-1 gap-1 ml-4">
+            <button onClick={() => setActiveTab("view")}
+              className={cn("rounded-md px-3 py-1.5 text-sm font-medium transition-all",
+                activeTab === "view" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+              )}>
+              <Eye className="h-3.5 w-3.5 inline mr-1.5" />{t("videoAi.detail")}
+            </button>
+            <button onClick={() => setActiveTab("edit")}
+              className={cn("rounded-md px-3 py-1.5 text-sm font-medium transition-all",
+                activeTab === "edit" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+              )}>
+              <Edit2 className="h-3.5 w-3.5 inline mr-1.5" />{t("videoAi.edit")}
+            </button>
+          </div>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-0 max-h-[75vh] overflow-y-auto">
-          <div className="bg-black/5 dark:bg-black/30 flex items-center justify-center p-4 min-h-[280px]">
-            {item.imageUrl ? (
-              <img src={item.imageUrl} alt={item.prompt} className="rounded-xl object-contain max-h-[420px] w-full shadow-lg" />
-            ) : item.status === "generating" ? (
-              <div className="flex flex-col items-center gap-3 text-muted-foreground">
-                <Loader2 className="h-10 w-10 animate-spin text-primary" />
-                <p className="text-sm">{t("imageAi.generatingImage")}</p>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                <XCircle className="h-10 w-10 opacity-30" />
-                <p className="text-sm">{t("videoAi.failed")}</p>
-              </div>
-            )}
-          </div>
-
-          <div className="flex flex-col p-5 gap-4 overflow-y-auto">
-            <div className="flex rounded-lg bg-muted p-1 gap-1">
-              <button onClick={() => setActiveTab("view")}
-                className={cn("flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-all",
-                  activeTab === "view" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
-                )}>
-                <Eye className="h-3.5 w-3.5 inline mr-1.5" />{t("videoAi.detail")}
-              </button>
-              <button onClick={() => setActiveTab("edit")}
-                className={cn("flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-all",
-                  activeTab === "edit" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
-                )}>
-                <Edit2 className="h-3.5 w-3.5 inline mr-1.5" />{t("videoAi.edit")}
-              </button>
+        {activeTab === "view" && (
+          <div className="flex flex-col">
+            {/* Media Section - Full Width */}
+            <div className="bg-neutral-100 dark:bg-neutral-900/50 flex items-center justify-center p-6">
+              {item.imageUrl ? (
+                <img 
+                  src={item.imageUrl} 
+                  alt={item.prompt} 
+                  className="rounded-xl object-contain max-w-full max-h-[60vh] shadow-2xl animate-in fade-in duration-300" 
+                />
+              ) : item.status === "generating" ? (
+                <div className="flex flex-col items-center gap-3 text-muted-foreground py-12">
+                  <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                  <p className="text-sm font-medium">{t("imageAi.generatingImage")}</p>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-2 text-muted-foreground py-12">
+                  <XCircle className="h-12 w-12 opacity-30" />
+                  <p className="text-sm font-medium">{t("videoAi.failed")}</p>
+                </div>
+              )}
             </div>
 
-            {activeTab === "view" && (
-              <div className="flex flex-col gap-4 flex-1">
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="rounded-lg bg-muted/50 px-3 py-2">
-                    <p className="text-muted-foreground mb-0.5">{t("imageAi.modalModel")}</p>
-                    <p className="font-medium">{item.model === "text-to-image" ? "Text→Image" : "Image→Image"}</p>
-                  </div>
-                  <div className="rounded-lg bg-muted/50 px-3 py-2">
-                    <p className="text-muted-foreground mb-0.5">{t("imageAi.modalRatio")}</p>
-                    <p className="font-medium">{item.aspectRatio}</p>
-                  </div>
-                  <div className="rounded-lg bg-muted/50 px-3 py-2">
-                    <p className="text-muted-foreground mb-0.5">{t("imageAi.modalResolution")}</p>
-                    <p className="font-medium">{item.resolution} ({item.width}×{item.height}px)</p>
-                  </div>
-                  <div className="rounded-lg bg-muted/50 px-3 py-2">
-                    <p className="text-muted-foreground mb-0.5">{t("imageAi.modalDuration")}</p>
-                    <p className="font-medium">{item.durationMs ? `${(item.durationMs / 1000).toFixed(1)}s` : "—"}</p>
-                  </div>
+            {/* Details Section */}
+            <div className="p-6 space-y-6">
+              {/* Metadata Chips */}
+              <div className="flex flex-wrap gap-2">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted/50 text-xs font-medium">
+                  <ImageIcon className="h-3 w-3" />
+                  {item.model === "text-to-image" ? "Text→Image" : "Image→Image"}
                 </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <p className="text-xs font-semibold text-muted-foreground">{t("imageAi.captionLabel")}</p>
-                    {item.caption && (
-                      <button onClick={() => navigator.clipboard.writeText(item.caption)}
-                        className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors">
-                        <Copy className="h-3 w-3" /> {t("imageAi.copyCaption")}
-                      </button>
-                    )}
-                  </div>
-                  <p className="text-sm leading-relaxed bg-muted/40 rounded-lg px-3 py-2 whitespace-pre-line">
-                    {item.caption || (item.status === "generating" ? t("videoAi.preparingCaption") : t("imageAi.noCaption"))}
-                  </p>
+                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted/50 text-xs font-medium">
+                  <LayoutGrid className="h-3 w-3" />
+                  {item.aspectRatio}
                 </div>
-
-                <div className="mt-auto flex flex-col gap-2">
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="outline" className="flex-1 gap-1.5" onClick={handleDownload} disabled={!item.imageUrl}>
-                      <Download className="h-3.5 w-3.5" /> {t("imageAi.download")}
-                    </Button>
-                    <Button size="sm" variant="outline" className="flex-1 gap-1.5"
-                      onClick={() => item.imageUrl && navigator.clipboard.writeText(item.imageUrl)} disabled={!item.imageUrl}>
-                      <Copy className="h-3.5 w-3.5" /> {t("imageAi.copyUrl")}
-                    </Button>
+                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted/50 text-xs font-medium">
+                  {item.resolution} ({item.width}×{item.height}px)
+                </div>
+                {item.durationMs && (
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted/50 text-xs font-medium">
+                    <Clock className="h-3 w-3" />
+                    {(item.durationMs / 1000).toFixed(1)}s
                   </div>
+                )}
+                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted/50 text-xs font-medium">
+                  <Coins className="h-3 w-3" />
+                  1 {t("header.coins")}
+                </div>
+                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted/50 text-xs font-medium">
+                  {item.createdAt.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
+                </div>
+              </div>
 
-                  {connectedSocmed.length > 0 && item.imageUrl && (
-                    <div className="space-y-1.5">
-                      <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-                        <Share2 className="h-3 w-3" /> {t("videoAi.shareTo")}
-                      </p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {connectedSocmed.includes("twitter") && (
-                          <Button size="sm" className={cn("gap-1.5 text-white border-0 text-xs h-8",
-                            shareSuccess === "twitter" ? "bg-green-500" : "bg-sky-500 hover:bg-sky-600")}
-                            onClick={() => handleShare("twitter")}>
-                            {shareSuccess === "twitter" ? <CheckCircle2 className="h-3.5 w-3.5" /> : <TwitterIcon className="h-3.5 w-3.5" />}
-                            {shareSuccess === "twitter" ? t("imageAi.shared") : t("imageAi.twitter")}
-                          </Button>
-                        )}
-                        {connectedSocmed.includes("instagram") && (
-                          <Button size="sm" className={cn("gap-1.5 text-white border-0 text-xs h-8",
-                            shareSuccess === "instagram" ? "bg-green-500" : "bg-gradient-to-r from-pink-500 to-purple-600")}
-                            onClick={() => handleShare("instagram")}>
-                            {shareSuccess === "instagram" ? <CheckCircle2 className="h-3.5 w-3.5" /> : <InstagramIcon className="h-3.5 w-3.5" />}
-                            {shareSuccess === "instagram" ? t("imageAi.shared") : t("imageAi.instagram")}
-                          </Button>
-                        )}
-                        {connectedSocmed.includes("facebook") && (
-                          <Button size="sm" className={cn("gap-1.5 text-white border-0 text-xs h-8",
-                            shareSuccess === "facebook" ? "bg-green-500" : "bg-blue-600 hover:bg-blue-700")}
-                            onClick={() => handleShare("facebook")}>
-                            {shareSuccess === "facebook" ? <CheckCircle2 className="h-3.5 w-3.5" /> : <FacebookIcon className="h-3.5 w-3.5" />}
-                            {shareSuccess === "facebook" ? t("imageAi.shared") : t("imageAi.facebook")}
-                          </Button>
-                        )}
-                      </div>
-                    </div>
+              {/* Prompt Section */}
+              <div className="bg-muted/30 rounded-xl p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("imageAi.editPromptLabel")}</p>
+                  {isLongPrompt && (
+                    <button 
+                      onClick={() => setShowFullPrompt(!showFullPrompt)}
+                      className="text-xs text-primary hover:underline"
+                    >
+                      {showFullPrompt ? "Show Less" : "Show More"}
+                    </button>
                   )}
-
-                  <Button size="sm" variant="outline"
-                    className="w-full gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30"
-                    onClick={() => { onDelete(item.id); onClose() }}>
-                    <Trash2 className="h-3.5 w-3.5" /> {t("imageAi.deleteImage")}
-                  </Button>
                 </div>
+                <p className="text-sm leading-relaxed whitespace-pre-line">
+                  {displayPrompt}
+                </p>
               </div>
-            )}
 
-            {activeTab === "edit" && (
-              <div className="flex flex-col gap-4 flex-1">
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-muted-foreground">{t("imageAi.editPromptLabel")}</Label>
-                  <Textarea value={editPrompt} onChange={e => setEditPrompt(e.target.value)}
-                    rows={4} className="resize-none text-sm" placeholder={t("imageAi.editPromptPlaceholder")} />
-                  <Button size="sm" variant="outline" className="w-full gap-1.5"
-                    disabled={isRegenerating || !editPrompt.trim()} onClick={() => onRegenImage(item, editPrompt)}>
-                    {isRegenerating
-                      ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> {t("imageAi.generatingLong")}</>
-                      : <><RotateCcw className="h-3.5 w-3.5" /> {t("imageAi.regenImage")}</>}
-                  </Button>
+              {/* Caption Section */}
+              <div className="bg-muted/30 rounded-xl p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("imageAi.captionLabel")}</p>
+                  {item.caption && (
+                    <button 
+                      onClick={() => navigator.clipboard.writeText(item.caption)}
+                      className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+                    >
+                      <Copy className="h-3 w-3" /> {t("imageAi.copyCaption")}
+                    </button>
+                  )}
                 </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-muted-foreground">{t("imageAi.captionLabel")}</Label>
-                  <Textarea value={editCaption} onChange={e => setEditCaption(e.target.value)}
-                    rows={4} className="resize-none text-sm" placeholder={t("imageAi.editCaptionPlaceholder")} />
-                  <Button size="sm" variant="outline" className="w-full gap-1.5"
-                    disabled={isCaptioning || !item.imageUrl} onClick={() => onRegenCaption(item, editCaption || editPrompt)}>
-                    {isCaptioning
-                      ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> {t("imageAi.captionGenerating")}</>
-                      : <><Sparkles className="h-3.5 w-3.5" /> {t("imageAi.regenCaption")}</>}
-                  </Button>
-                </div>
-                <div className="mt-auto">
-                  <Button size="sm" className="w-full gap-1.5" onClick={handleSave}>
-                    <Save className="h-3.5 w-3.5" /> {t("imageAi.saveChanges")}
-                  </Button>
-                </div>
+                <p className="text-sm leading-relaxed whitespace-pre-line">
+                  {item.caption || (item.status === "generating" ? t("videoAi.preparingCaption") : t("imageAi.noCaption"))}
+                </p>
               </div>
-            )}
+
+              {/* Action Buttons */}
+              <div className="flex flex-wrap gap-2 pt-2">
+                <Button size="sm" variant="outline" className="gap-1.5" onClick={handleDownload} disabled={!item.imageUrl}>
+                  <Download className="h-4 w-4" /> {t("imageAi.download")}
+                </Button>
+                <Button size="sm" variant="outline" className="gap-1.5"
+                  onClick={() => item.imageUrl && navigator.clipboard.writeText(item.imageUrl)} disabled={!item.imageUrl}>
+                  <Copy className="h-4 w-4" /> {t("imageAi.copyUrl")}
+                </Button>
+
+                {connectedSocmed.length > 0 && item.imageUrl && (
+                  <>
+                    {connectedSocmed.includes("twitter") && (
+                      <Button size="sm" className={cn("gap-1.5 text-white border-0",
+                        shareSuccess === "twitter" ? "bg-green-500" : "bg-sky-500 hover:bg-sky-600")}
+                        onClick={() => handleShare("twitter")}>
+                        {shareSuccess === "twitter" ? <CheckCircle2 className="h-4 w-4" /> : <TwitterIcon className="h-4 w-4" />}
+                        {shareSuccess === "twitter" ? t("imageAi.shared") : t("imageAi.twitter")}
+                      </Button>
+                    )}
+                    {connectedSocmed.includes("instagram") && (
+                      <Button size="sm" className={cn("gap-1.5 text-white border-0",
+                        shareSuccess === "instagram" ? "bg-green-500" : "bg-gradient-to-r from-pink-500 to-purple-600")}
+                        onClick={() => handleShare("instagram")}>
+                        {shareSuccess === "instagram" ? <CheckCircle2 className="h-4 w-4" /> : <InstagramIcon className="h-4 w-4" />}
+                        {shareSuccess === "instagram" ? t("imageAi.shared") : t("imageAi.instagram")}
+                      </Button>
+                    )}
+                    {connectedSocmed.includes("facebook") && (
+                      <Button size="sm" className={cn("gap-1.5 text-white border-0",
+                        shareSuccess === "facebook" ? "bg-green-500" : "bg-blue-600 hover:bg-blue-700")}
+                        onClick={() => handleShare("facebook")}>
+                        {shareSuccess === "facebook" ? <CheckCircle2 className="h-4 w-4" /> : <FacebookIcon className="h-4 w-4" />}
+                        {shareSuccess === "facebook" ? t("imageAi.shared") : t("imageAi.facebook")}
+                      </Button>
+                    )}
+                  </>
+                )}
+
+                <Button size="sm" variant="outline"
+                  className="gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30 ml-auto"
+                  onClick={() => { onDelete(item.id); onClose() }}>
+                  <Trash2 className="h-4 w-4" /> {t("imageAi.deleteImage")}
+                </Button>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
+
+        {activeTab === "edit" && (
+          <div className="flex flex-col p-6 space-y-6">
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">{t("imageAi.editPromptLabel")}</Label>
+              <Textarea value={editPrompt} onChange={e => setEditPrompt(e.target.value)}
+                rows={4} className="resize-none" placeholder={t("imageAi.editPromptPlaceholder")} />
+              <Button size="sm" variant="outline" className="w-full gap-1.5"
+                disabled={isRegenerating || !editPrompt.trim()} onClick={() => onRegenImage(item, editPrompt)}>
+                {isRegenerating
+                  ? <><Loader2 className="h-4 w-4 animate-spin" /> {t("imageAi.generatingLong")}</>
+                  : <><RotateCcw className="h-4 w-4" /> {t("imageAi.regenImage")}</>}
+              </Button>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">{t("imageAi.captionLabel")}</Label>
+              <Textarea value={editCaption} onChange={e => setEditCaption(e.target.value)}
+                rows={4} className="resize-none" placeholder={t("imageAi.editCaptionPlaceholder")} />
+              <Button size="sm" variant="outline" className="w-full gap-1.5"
+                disabled={isCaptioning || !item.imageUrl} onClick={() => onRegenCaption(item, editCaption || editPrompt)}>
+                {isCaptioning
+                  ? <><Loader2 className="h-4 w-4 animate-spin" /> {t("imageAi.captionGenerating")}</>
+                  : <><Sparkles className="h-4 w-4" /> {t("imageAi.regenCaption")}</>}
+              </Button>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" className="flex-1 gap-1.5" onClick={handleSave}>
+                <Save className="h-4 w-4" /> {t("imageAi.saveChanges")}
+              </Button>
+              <Button size="sm" variant="outline" className="flex-1 gap-1.5" onClick={() => setActiveTab("view")}>
+                {t("videoAi.cancel")}
+              </Button>
+            </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   )
 }
+
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 

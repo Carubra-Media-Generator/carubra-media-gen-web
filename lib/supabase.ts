@@ -38,12 +38,8 @@ export async function findOne(table: string, filter: Record<string, any>): Promi
   const supabase = await getSupabaseAdmin()
   let query = supabase.from(table).select('*')
   for (const [key, value] of Object.entries(filter)) query = query.eq(key, value)
-  console.log(`[supabase] findOne query: table=${table}, filter=${JSON.stringify(filter)}`)
   const { data, error } = await query.maybeSingle()
-  if (error) {
-    console.error(`[supabase] findOne error: table=${table}, error=${JSON.stringify(error)}`)
-    throw error
-  }
+  if (error) throw error
   return data
 }
 
@@ -57,12 +53,8 @@ export async function find(
   for (const [key, value] of Object.entries(filter)) query = query.eq(key, value)
   if (options.orderBy) query = query.order(options.orderBy, { ascending: options.ascending ?? true })
   if (options.limit) query = query.limit(options.limit)
-  console.log(`[supabase] find query: table=${table}, filter=${JSON.stringify(filter)}, options=${JSON.stringify(options)}`)
   const { data, error } = await query
-  if (error) {
-    console.error(`[supabase] find error: table=${table}, error=${JSON.stringify(error)}`)
-    throw error
-  }
+  if (error) throw error
   return data ?? []
 }
 
@@ -70,12 +62,8 @@ export async function updateOne(table: string, filter: Record<string, any>, data
   const supabase = await getSupabaseAdmin()
   let query = supabase.from(table).update(data)
   for (const [key, value] of Object.entries(filter)) query = query.eq(key, value)
-  console.log(`[supabase] updateOne query: table=${table}, filter=${JSON.stringify(filter)}, data keys=${Object.keys(data)}`)
   const { data: result, error } = await query.select().single()
-  if (error) {
-    console.error(`[supabase] updateOne error: table=${table}, error=${JSON.stringify(error)}`)
-    throw error
-  }
+  if (error) throw error
   return result
 }
 
