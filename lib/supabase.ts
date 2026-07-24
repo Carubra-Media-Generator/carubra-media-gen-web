@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 let supabaseClient: SupabaseClient | null = null
+let supabaseAdminClient: SupabaseClient | null = null
 
 const getSupabaseUrl = () => process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL
 const getSupabaseAnonKey = () => process.env.SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -19,12 +20,17 @@ export async function getSupabase(): Promise<SupabaseClient> {
 }
 
 export async function getSupabaseAdmin(): Promise<SupabaseClient> {
-  const supabaseUrl = getSupabaseUrl()
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!supabaseUrl || !supabaseServiceKey) {
-    throw new Error('SUPABASE_URL/NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required')
+  if (!supabaseAdminClient) {
+    const supabaseUrl = getSupabaseUrl()
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    if (!supabaseUrl || !supabaseServiceKey) {
+      throw new Error('SUPABASE_URL/NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required')
+    }
+    supabaseAdminClient = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: { persistSession: false },
+    })
   }
-  return createClient(supabaseUrl, supabaseServiceKey)
+  return supabaseAdminClient
 }
 
 export async function insert(table: string, data: any): Promise<any> {

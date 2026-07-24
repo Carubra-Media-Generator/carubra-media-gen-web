@@ -133,13 +133,15 @@ export async function POST(req: NextRequest) {
     const CAPTION_API_URL = process.env.CAPTION_API_URL
     const CAPTION_MODEL = process.env.CAPTION_MODEL || 'utero/carubra-6.2.1'
 
+    const isValidHttpUrl = typeof imageUrl === 'string' && (imageUrl.startsWith('http://') || imageUrl.startsWith('https://'))
+
     let caption: string
     let usage: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | null = null
 
     if (CAPTION_API_KEY && CAPTION_API_URL) {
       try {
         const systemPrompt = buildSystemPrompt(platform)
-        const userMessages: any[] = imageUrl
+        const userMessages: any[] = isValidHttpUrl
           ? [{ role: 'user', content: [
               { type: 'image_url', image_url: { url: imageUrl } },
               { type: 'text', text: buildUserPrompt(prompt, platform) },
@@ -182,12 +184,7 @@ OUTPUT FORMAT:
 - Emojis only where they feel natural and appropriate
 
 Return ONLY the caption with hashtags. No explanations, no meta-commentary.`
-          const retryMessages: any[] = imageUrl
-            ? [{ role: 'user', content: [
-                { type: 'image_url', image_url: { url: imageUrl } },
-                { type: 'text', text: `Prompt: ${prompt.slice(0, 200)}` },
-              ]}]
-            : [{ role: 'user', content: `Prompt: ${prompt.slice(0, 200)}` }]
+          const retryMessages: any[] = [{ role: 'user', content: `Prompt: ${prompt.slice(0, 200)}` }]
 
           const retryResult = await callCaptionAPI(
             CAPTION_API_URL,

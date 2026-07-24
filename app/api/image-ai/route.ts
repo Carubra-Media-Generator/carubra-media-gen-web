@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
     const userImages = await find(
       'images',
       { user_id: user.id },
-      { orderBy: 'created_at', ascending: false }
+      { orderBy: 'created_at', ascending: false, limit: 50 }
     )
 
     // Supabase stores snake_case (image_url), map to camelCase for the client

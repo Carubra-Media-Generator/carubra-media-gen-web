@@ -148,9 +148,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
     setError(null)
     setIsBalanceLoaded(false)
-    localStorage.removeItem("carubra-user")
-    localStorage.removeItem("carubra-token")
-    router.push("/")
+
+    // Clear all app storage items to prevent data stuck between sessions
+    try {
+      fetch("/api/auth/logout", { method: "POST" }).catch(() => null)
+      const keysToRemove: string[] = []
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (key && key.startsWith("carubra-")) keysToRemove.push(key)
+      }
+      keysToRemove.forEach((k) => localStorage.removeItem(k))
+      sessionStorage.clear()
+    } catch {
+      localStorage.removeItem("carubra-user")
+      localStorage.removeItem("carubra-token")
+    }
+
+    if (typeof window !== "undefined") {
+      window.location.href = "/"
+    } else {
+      router.push("/")
+    }
   }
 
   const clearError = () => {
