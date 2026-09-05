@@ -945,7 +945,6 @@ const translations: Translations = {
 
   // Content Analytics - error & chart
   "analytics.generateFailed": { id: "Gagal generate strategi", en: "Failed to generate strategy" },
-  "analytics.engagementRate": { id: "Engagement Rate", en: "Engagement Rate" },
   "analytics.estReachChart": { id: "Est. Reach", en: "Est. Reach" },
 
   // Content Analytics - audience options
@@ -964,9 +963,6 @@ const translations: Translations = {
   "analytics.contentTypeUgc": { id: "User-generated content", en: "User-generated content" },
   "analytics.contentTypePromo": { id: "Promosi / Diskon", en: "Promo / Discount" },
   "analytics.contentTypeInspirational": { id: "Inspirational / Motivasi", en: "Inspirational / Motivation" },
-
-  // Auto Upload - error
-  "autoUpload.serverError": { id: "Terjadi kesalahan pada server", en: "An error occurred on the server" },
 }
 
 type LanguageContextType = {

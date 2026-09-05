@@ -223,7 +223,7 @@ Return ONLY the caption with hashtags. No explanations, no meta-commentary.`
 
     if (imageId) {
       try {
-        await updateOne('images', { id: imageId }, { caption })
+        await updateOne('images', { id: imageId, user_id: user.id }, { caption })
       } catch (dbError) {
         console.error('[image-ai] Failed to update caption in DB:', dbError)
       }

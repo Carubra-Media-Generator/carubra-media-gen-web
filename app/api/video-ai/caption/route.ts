@@ -119,7 +119,7 @@ export async function POST(req: NextRequest) {
     let videoRecord = null
     if (videoId) {
       try {
-        videoRecord = await findOne('videos', { id: videoId })
+        videoRecord = await findOne('videos', { id: videoId, user_id: user.id })
       } catch (dbErr) {
         console.error('[video-ai] Failed to fetch video record:', dbErr)
       }

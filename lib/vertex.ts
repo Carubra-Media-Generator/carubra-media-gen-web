@@ -35,12 +35,11 @@ export function getConfig() {
 export function initializeVertexAI(): VertexAI {
   const config = getConfig();
   
-  console.log('[vertex.ts] DEBUG - Environment variables:', {
-    GOOGLE_APPLICATION_CREDENTIALS: process.env.GOOGLE_APPLICATION_CREDENTIALS,
-    GOOGLE_CLOUD_PROJECT: process.env.GOOGLE_CLOUD_PROJECT,
-    VERTEX_LOCATION: process.env.VERTEX_LOCATION,
-    VERTEX_MODEL: process.env.VERTEX_MODEL,
-    resolvedCredentialsPath: config.credentialsPath,
+  console.log('[vertex.ts] Initializing Vertex AI:', {
+    project: config.project ? '[SET]' : '[MISSING]',
+    location: config.location,
+    model: config.model,
+    hasCredentials: !!config.credentialsPath,
   });
 
   if (!config.project) {

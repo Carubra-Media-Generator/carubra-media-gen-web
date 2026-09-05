@@ -436,28 +436,28 @@ export async function POST(req: NextRequest) {
 	const user = getUserFromRequest(req)
 	if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+	const body = await req.json()
+	const { prompt, platform, target_audience, content_type } = body
+
+	if (!prompt?.trim()) {
+		return NextResponse.json({ error: 'Prompt tidak boleh kosong' }, { status: 400 })
+	}
+	if (!platform) {
+		return NextResponse.json({ error: 'Platform harus dipilih' }, { status: 400 })
+	}
+
+	const jobId = `ca_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+	const job: StrategyJob = {
+		id: jobId,
+		prompt,
+		platform,
+		target_audience: target_audience ?? 'Umum',
+		status: 'processing',
+		created_at: new Date().toISOString(),
+		result: null,
+	}
+
 	try {
-		const body = await req.json()
-		const { prompt, platform, target_audience, content_type } = body
-
-		if (!prompt?.trim()) {
-			return NextResponse.json({ error: 'Prompt tidak boleh kosong' }, { status: 400 })
-		}
-		if (!platform) {
-			return NextResponse.json({ error: 'Platform harus dipilih' }, { status: 400 })
-		}
-
-		const jobId = `ca_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-		const job: StrategyJob = {
-			id: jobId,
-			prompt,
-			platform,
-			target_audience: target_audience ?? 'Umum',
-			status: 'processing',
-			created_at: new Date().toISOString(),
-			result: null,
-		}
-
 		// Persist immediately as 'processing'
 		await persistJob(job, user.id, target_audience, content_type)
 

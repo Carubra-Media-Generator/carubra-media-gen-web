@@ -3,8 +3,6 @@ import { getUserFromRequest } from '../../../../middleware/auth'
 import { publishDueScheduledPosts } from '../../../../lib/socialPublish'
 
 export async function POST(req: NextRequest) {
-  // Support both user-triggered (via dashboard) and cron-triggered (via Vercel Cron)
-  const user = getUserFromRequest(req)
   const cronSecret = req.headers.get('x-cron-secret')
   const expectedCronSecret = process.env.CRON_SECRET
 
@@ -14,10 +12,16 @@ export async function POST(req: NextRequest) {
     if (cronSecret !== expectedCronSecret) {
       return NextResponse.json({ error: 'Invalid cron secret' }, { status: 403 })
     }
-    const result = await publishDueScheduledPosts()
-    return NextResponse.json(result)
+    try {
+      const result = await publishDueScheduledPosts()
+      return NextResponse.json(result)
+    } catch (error: any) {
+      console.error('[scheduled-posts/run] Cron publish failed:', error)
+      return NextResponse.json({ error: error.message || 'Failed to process scheduled posts' }, { status: 500 })
+    }
   }
 
+  const user = getUserFromRequest(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   try {
@@ -33,8 +37,13 @@ export async function GET(req: NextRequest) {
   const expectedCronSecret = process.env.CRON_SECRET
 
   if (cronSecret && expectedCronSecret && cronSecret === expectedCronSecret) {
-    const result = await publishDueScheduledPosts()
-    return NextResponse.json(result)
+    try {
+      const result = await publishDueScheduledPosts()
+      return NextResponse.json(result)
+    } catch (error: any) {
+      console.error('[scheduled-posts/run] Cron GET failed:', error)
+      return NextResponse.json({ error: error.message || 'Failed to process scheduled posts' }, { status: 500 })
+    }
   }
 
   const user = getUserFromRequest(req)

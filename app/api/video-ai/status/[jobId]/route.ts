@@ -119,6 +119,27 @@ export async function GET(
     const decodedJobId = decodeURIComponent(jobId)
     console.log(`[video-ai] Decoded jobId: ${decodedJobId}`)
 
+    // Stale detection: if the video has been processing for over 30 minutes, mark as failed
+    const existingVideo = await findOne('videos', { job_id: decodedJobId })
+    if (existingVideo && existingVideo.status === 'processing' && existingVideo.created_at) {
+      const createdAt = new Date(existingVideo.created_at).getTime()
+      const thirtyMinMs = 30 * 60 * 1000
+      if (Date.now() - createdAt > thirtyMinMs) {
+        console.warn(`[video-ai] Job ${decodedJobId} has been processing for over 30 minutes — marking as failed`)
+        await updateOne('videos', { job_id: decodedJobId }, { status: 'failed' })
+        // Refund coins if not already refunded
+        if (Number(existingVideo.coins_used ?? 0) > 0) {
+          try {
+            await creditUserCoins(user.id, Number(existingVideo.coins_used))
+            console.log(`[video-ai] Refunded ${existingVideo.coins_used} coins for stale job`)
+          } catch (refundErr) {
+            console.error('[video-ai] Failed to refund coins for stale job:', refundErr)
+          }
+        }
+        return NextResponse.json({ status: 'failed', detail: 'Video generation timed out after 30 minutes.' })
+      }
+    }
+
     const config = getConfig()
 
     console.log(`[video-ai] Getting access token for status check...`)
@@ -354,7 +375,17 @@ export async function GET(
           throw storageError
         }
       } else if (!fileBuffer && !gcsUri) {
-        console.warn('[video-ai] No video data found in completed response')
+        console.warn('[video-ai] No video data found in completed response — treating as failure')
+        try {
+          await updateOne('videos', { job_id: decodedJobId }, { status: 'failed' })
+          if (existingVideo?.user_id === user.id && Number(existingVideo.coins_used ?? 0) > 0) {
+            await creditUserCoins(user.id, Number(existingVideo.coins_used))
+            console.log(`[video-ai] Refunded ${existingVideo.coins_used} coins for empty completed response`)
+          }
+        } catch (dbErr) {
+          console.error('[video-ai] Failed to update failed status for empty response:', dbErr)
+        }
+        return NextResponse.json({ status: 'failed', detail: 'Video generation completed but no video data was returned.' })
       }
 
       // Upload buffer to Supabase Storage (shared by both strategies)
@@ -493,8 +524,25 @@ export async function GET(
 
     return NextResponse.json({ status: 'processing' })
 
-  } catch (error: any) {
+    } catch (error: any) {
     console.error('[video-ai] Status check error:', error)
+    // If both strategies failed, mark the video as failed in DB
+    try {
+      const failedVideo = await findOne('videos', { job_id: decodeURIComponent(jobId) })
+      if (failedVideo && failedVideo.status !== 'failed') {
+        await updateOne('videos', { job_id: decodeURIComponent(jobId) }, { status: 'failed' })
+        if (Number(failedVideo.coins_used ?? 0) > 0) {
+          try {
+            await creditUserCoins(user.id, Number(failedVideo.coins_used))
+            console.log(`[video-ai] Refunded ${failedVideo.coins_used} coins for failed poll`)
+          } catch (refundErr) {
+            console.error('[video-ai] Failed to refund coins:', refundErr)
+          }
+        }
+      }
+    } catch (dbErr) {
+      console.error('[video-ai] Failed to update DB after poll error:', dbErr)
+    }
     return NextResponse.json({ error: 'Failed to check video status', detail: String(error) }, { status: 502 })
   }
 }

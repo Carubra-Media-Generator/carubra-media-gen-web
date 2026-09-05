@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!supportedPlatforms.includes(platform)) {
-      return NextResponse.json({ error: `Platform ${platform} is not supported.`, status: 400 })
+      return NextResponse.json({ error: `Platform ${platform} is not supported.` }, { status: 400 })
     }
 
     if (platform === 'whatsapp') {

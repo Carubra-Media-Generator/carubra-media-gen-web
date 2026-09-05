@@ -2,6 +2,24 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest } from '@/middleware/auth'
 import { deleteOne, findOne, updateOne } from '@/lib/supabase'
 
+const toClient = (doc: any) => ({
+  id: doc.id,
+  _id: doc.id,
+  mediaSource: doc.media_source ?? 'upload',
+  generatedContentId: doc.generated_video_id ?? doc.generated_image_id ?? null,
+  caption: doc.caption ?? '',
+  mediaUrl: doc.media_url ?? null,
+  mediaName: doc.media_name ?? null,
+  mediaType: doc.media_type ?? null,
+  postTypes: doc.post_types ?? {},
+  date: doc.scheduled_date ?? '',
+  time: doc.scheduled_time ?? '',
+  scheduledAt: doc.scheduled_date && doc.scheduled_time ? `${doc.scheduled_date}T${doc.scheduled_time}` : null,
+  platforms: doc.platforms ?? [],
+  status: doc.status ?? 'scheduled',
+  createdAt: doc.created_at,
+})
+
 export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -52,7 +70,7 @@ export async function PUT(
     }
 
     const result = await updateOne('scheduled_posts', { id, user_id: user.id }, updateData)
-    return NextResponse.json({ post: result })
+    return NextResponse.json({ post: toClient(result) })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }

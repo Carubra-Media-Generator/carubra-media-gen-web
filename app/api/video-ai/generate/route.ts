@@ -114,7 +114,6 @@ export async function POST(req: NextRequest) {
 
         // Get Google Cloud access token
         console.log(`[video-ai] Getting Google Cloud access token...`)
-        console.log(`[video-ai] Using credentials path: ${config.credentialsPath}`)
         let accessToken: string
         try {
           const { GoogleAuth } = require('google-auth-library')

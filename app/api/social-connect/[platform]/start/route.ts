@@ -50,7 +50,7 @@ export async function POST(
   }
   await storeOAuthSession(state, user.id, platform, codeVerifier)
 
-  const url = buildOAuthUrl(platform, redirectUri, state)
+  const url = buildOAuthUrl(platform, redirectUri, state, codeVerifier)
   if (!url) {
     return NextResponse.json({ error: `Failed to build OAuth URL for ${platform}` }, { status: 500 })
   }

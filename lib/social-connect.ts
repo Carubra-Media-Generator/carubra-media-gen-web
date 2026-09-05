@@ -149,28 +149,27 @@ export function getOAuthCredentials(platform: string): { clientId: string; clien
   return null
 }
 
-export function buildOAuthUrl(platform: string, redirectUri: string, state: string): string | null {
+export function buildOAuthUrl(platform: string, redirectUri: string, state: string, codeVerifier?: string): string | null {
   const creds = getOAuthCredentials(platform)
   if (!creds) return null
 
   const encodedRedirect = encodeURIComponent(redirectUri)
   const encodedState = encodeURIComponent(state)
-  const encodedUserId = encodeURIComponent(state)
 
   const urls: Record<string, string> = {
     instagram: `https://www.facebook.com/v18.0/dialog/oauth?client_id=${creds.clientId}&redirect_uri=${encodedRedirect}&scope=instagram_basic,instagram_content_publish,pages_show_list,pages_read_engagement&response_type=code&state=${encodedState}`,
     facebook: `https://www.facebook.com/v18.0/dialog/oauth?client_id=${creds.clientId}&redirect_uri=${encodedRedirect}&scope=pages_show_list,pages_read_engagement,pages_manage_posts&response_type=code&state=${encodedState}`,
     youtube: `https://accounts.google.com/o/oauth2/v2/auth?client_id=${creds.clientId}&redirect_uri=${encodedRedirect}&scope=${encodeURIComponent('openid email profile https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/youtube.force-ssl')}&response_type=code&access_type=offline&prompt=consent&include_granted_scopes=true&state=${encodedState}`,
     tiktok: `https://www.tiktok.com/auth/authorize/?client_key=${creds.clientId}&scope=user.info.basic,video.upload&response_type=code&redirect_uri=${encodedRedirect}&state=${encodedState}`,
-    twitter: buildTwitterOAuthUrl(creds.clientId, redirectUri, state),
+    twitter: buildTwitterOAuthUrl(creds.clientId, redirectUri, state, codeVerifier),
     threads: `https://threads.net/oauth/authorize?client_id=${creds.clientId}&redirect_uri=${encodedRedirect}&scope=${encodeURIComponent('threads_basic,threads_content_publish')}&response_type=code&state=${encodedState}`,
   }
 
   return urls[platform] || null
 }
 
-function buildTwitterOAuthUrl(clientId: string, redirectUri: string, state: string): string {
-  const verifier = generateCodeVerifier()
+function buildTwitterOAuthUrl(clientId: string, redirectUri: string, state: string, existingVerifier?: string): string {
+  const verifier = existingVerifier || generateCodeVerifier()
   const challenge = generateCodeChallenge(verifier)
   const encodedRedirect = encodeURIComponent(redirectUri)
   const encodedState = encodeURIComponent(state)
