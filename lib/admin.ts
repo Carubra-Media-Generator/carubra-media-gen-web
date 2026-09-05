@@ -29,5 +29,5 @@ export async function getAdminUser(req: NextRequest): Promise<AppUser | null> {
 }
 
 export function isAdminUser(user: any): boolean {
-  return validateUserSchema(user) && user.role?.toLowerCase().includes('admin')
+  return !!(validateUserSchema(user) && user.role?.toLowerCase().includes('admin'))
 }

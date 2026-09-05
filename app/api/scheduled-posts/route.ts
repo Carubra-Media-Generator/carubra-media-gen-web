@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest } from '../../../middleware/auth'
 import { find, insert, uploadToStorage } from '../../../lib/supabase'
+import { deductUserCoins, ensureUserHasCoins } from '../../../lib/coins'
 import { v4 as uuidv4 } from 'uuid'
 
 function isDataUrl(value: string) {
@@ -56,9 +57,26 @@ export async function POST(req: NextRequest) {
       postTypes, date, time, platforms, status,
     } = await req.json()
 
-        const scheduledAt = date && time ? new Date(`${date}T${time}`).toISOString() : null
+    const scheduledAt = date && time ? new Date(`${date}T${time}`).toISOString() : null
     if (scheduledAt && isNaN(Date.parse(scheduledAt))) {
       return NextResponse.json({ error: 'Tanggal dan waktu jadwal tidak valid' }, { status: 400 })
+    }
+
+    // Calculate coin cost
+    const platformCount = Array.isArray(platforms) ? platforms.length : 0
+    let coinCost = platformCount
+    if (mediaType === 'image') coinCost += 1
+    else if (mediaType === 'video') coinCost += 3
+
+    if (status !== 'draft' && coinCost > 0) {
+      try {
+        await ensureUserHasCoins(user.id, coinCost)
+      } catch (e: any) {
+        if (e.status === 402) {
+          return NextResponse.json({ error: 'Saldo koin tidak mencukupi. Silakan top up terlebih dahulu.' }, { status: 402 })
+        }
+        throw e
+      }
     }
 
     let finalMediaUrl = mediaUrl ?? null
@@ -95,6 +113,16 @@ export async function POST(req: NextRequest) {
     }
 
     const result = await insert('scheduled_posts', doc)
+
+    // Deduct coins after successful creation
+    if (status !== 'draft' && coinCost > 0) {
+      try {
+        await deductUserCoins(user.id, coinCost)
+      } catch (e) {
+        console.warn('[scheduled-posts] Failed to deduct coins:', e)
+      }
+    }
+
     return NextResponse.json({ post: toClient(result) }, { status: 201 })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })

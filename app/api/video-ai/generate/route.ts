@@ -1,97 +1,218 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v4 as uuidv4 } from 'uuid'
 import { insert } from '@/lib/supabase'
+import { creditUserCoins, deductUserCoins, ensureUserHasCoins, getVideoCoinCost } from '@/lib/coins'
 import { getUserFromRequest } from '@/middleware/auth'
+import { validateVertexConfig, getVideoGenerationEndpoint, getConfig } from '@/lib/vertex'
 
 export async function POST(req: NextRequest) {
   const user = getUserFromRequest(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   try {
-    const { prompt, style, duration } = await req.json()
+    const { prompt, style, duration, resolution = '480p', init_image } = await req.json()
 
     if (!prompt || typeof prompt !== 'string') {
       return NextResponse.json({ error: 'Prompt is required' }, { status: 400 })
     }
 
-    const VIDEO_API_KEY = process.env.VIDEO_OPENROUTER_API_KEY || process.env.VIDEO_API_KEY
-    const VIDEO_API_URL = process.env.VIDEO_OPENROUTER_URL || process.env.VIDEO_API_URL
-    const VIDEO_MODEL = process.env.VIDEO_OPENROUTER_MODEL || process.env.VIDEO_MODEL || 'carubra/video'
-
-    if (!VIDEO_API_KEY || !VIDEO_API_URL) {
-      return NextResponse.json({ error: 'Server is not configured with video generation API credentials' }, { status: 500 })
+    const coinsUsed = getVideoCoinCost(resolution)
+    try {
+      await ensureUserHasCoins(user.id, coinsUsed)
+    } catch (coinError: any) {
+      return NextResponse.json(
+        { error: coinError.message ?? 'Insufficient coins' },
+        { status: coinError.status ?? 500 }
+      )
     }
 
-    const baseUrl = VIDEO_API_URL.replace(/\/$/, '')
-    let fetchUrl = `${baseUrl}/v1/videos`
-    if (baseUrl.endsWith('/v1')) {
-      fetchUrl = `${baseUrl}/videos`
+    // Validate Vertex AI configuration
+    try {
+      validateVertexConfig()
+    } catch (configError: any) {
+      return NextResponse.json({ error: configError.message }, { status: 500 })
     }
+
+    // Map quality / resolution to support DB constraint ('480p', '720p') and Veo max
+    let dbResolution = '480p'
+    if (resolution === '720p' || resolution === '1080p' || resolution === '2K') {
+      dbResolution = '720p'
+    }
+
+    // Map style / aspect ratio to DB constraint and Vertex AI supported options
+    let dbAspectRatio = '16:9'
+    let providerAspectRatio = '16:9'
+
+    if (style) {
+      const norm = style.replace('-', ':')
+      console.log(`[video-ai] Style input: "${style}", normalized: "${norm}"`)
+      if (norm === '9:16' || norm === '3:4') {
+        dbAspectRatio = '9:16'
+        providerAspectRatio = '9:16'
+      } else if (norm === '1:1') {
+        dbAspectRatio = '1:1'
+        providerAspectRatio = '16:9' // Veo 2.0 fallback
+      } else {
+        dbAspectRatio = '16:9'
+        providerAspectRatio = '16:9'
+      }
+    }
+
+    console.log(`[video-ai] Aspect ratio mapping - input style: "${style}", dbAspectRatio: "${dbAspectRatio}", providerAspectRatio: "${providerAspectRatio}"`)
 
     const newVideo = {
       id: uuidv4(),
       user_id: user.id,
       prompt,
-      style,
+      model: init_image ? 'image-to-video' : 'text-to-video',
+      resolution: dbResolution,
+      aspect_ratio: dbAspectRatio,
       duration,
+      coins_used: coinsUsed,
       status: 'processing',
       created_at: new Date(),
     }
 
     try {
-      let response: globalThis.Response
-      const headers: Record<string, string> = {
-        Authorization: `Bearer ${VIDEO_API_KEY}`,
-      }
+      console.log(`[video-ai] Calling Vertex AI with prompt: ${prompt}, Aspect Ratio: ${providerAspectRatio}`)
 
-      headers['Content-Type'] = 'application/json'
-
-      let aspect_ratio: string | undefined = undefined
-      if (style) {
-        aspect_ratio = style.replace('-', ':') // E.g. '16-9' -> '16:9'
-      }
-
-      const body = {
-        model: VIDEO_MODEL,
-        prompt: prompt,
-        ...(aspect_ratio ? { aspect_ratio } : {}),
-      }
-
-      console.log(`[video-ai] Calling: ${fetchUrl}`)
-      console.log(`[video-ai] Model: ${VIDEO_MODEL}, Prompt: ${prompt}, Aspect Ratio: ${aspect_ratio}`)
-
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 60000)
-
+      let jobId: string
       try {
-        response = await fetch(fetchUrl, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(body),
-          signal: controller.signal,
-        })
-      } finally {
-        clearTimeout(timeout)
-      }
+        const endpoint = getVideoGenerationEndpoint()
+        const config = getConfig()
+        const outputGcsUri = config.outputGcsUri
+        
+        if (!outputGcsUri) {
+          throw new Error('VERTEX_OUTPUT_GCS_URI environment variable is required')
+        }
 
-      const rawText = await response.text()
-      console.log(`[video-ai] Response status: ${response.status}`)
-      console.log(`[video-ai] Response body: ${rawText.slice(0, 500)}`)
+        // Prepare Vertex AI REST API request
+        const requestBody = {
+          instances: [
+            {
+              prompt: prompt,
+              ...(init_image ? {
+                image: {
+                  bytesBase64Encoded: init_image,
+                  mimeType: "image/jpeg" // Default to JPEG for image-to-video
+                }
+              } : {}),
+            }
+          ],
+          parameters: {
+            outputGcsUri: outputGcsUri,
+            sampleCount: 1,
+            ...(providerAspectRatio ? { aspectRatios: [providerAspectRatio] } : {}),
+          }
+        }
 
-      let carubraData: any
-      try { carubraData = JSON.parse(rawText) } catch { carubraData = rawText }
+        console.log(`[video-ai] Image-to-video mode: ${init_image ? 'YES' : 'NO'}`)
+        console.log(`[video-ai] Init image length: ${init_image ? init_image.length : 0}`)
 
-      if (!response.ok) {
+        console.log(`[video-ai] Vertex AI endpoint: ${endpoint}`)
+        console.log(`[video-ai] Request body: ${JSON.stringify(requestBody)}`)
+
+        // Get Google Cloud access token
+        console.log(`[video-ai] Getting Google Cloud access token...`)
+        let accessToken: string
+        try {
+          const { GoogleAuth } = require('google-auth-library')
+          const auth = new GoogleAuth({
+            keyFilename: config.credentialsPath,
+            scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+          })
+          const client = await auth.getClient()
+          accessToken = (await client.getAccessToken()).token
+          console.log(`[video-ai] Access token obtained successfully`)
+        } catch (authError: any) {
+          console.error(`[video-ai] Authentication error:`, authError)
+          throw new Error(`Failed to get Google Cloud access token: ${authError.message}`)
+        }
+
+        // Call Vertex AI REST API
+        console.log(`[video-ai] Calling Vertex AI API...`)
+        let response: Response
+        try {
+          response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestBody),
+          })
+        } catch (fetchError: any) {
+          console.error(`[video-ai] Fetch error:`, fetchError)
+          throw new Error(`Network error calling Vertex AI: ${fetchError.message}`)
+        }
+
+        console.log(`[video-ai] Vertex AI response status: ${response.status}`)
+        const responseText = await response.text()
+        console.log(`[video-ai] Vertex AI response body: ${responseText.slice(0, 1000)}`)
+
+        let responseData
+        try {
+          responseData = JSON.parse(responseText)
+        } catch {
+          responseData = { raw: responseText }
+        }
+
+        if (!response.ok) {
+          throw new Error(`Vertex AI API error (${response.status}): ${JSON.stringify(responseData)}`)
+        }
+
+        // Extract operation name (job ID) from response
+        const operationName = responseData.name || responseData.operation?.name
+        if (!operationName) {
+          // If no operation name returned, use our UUID as the job ID
+          jobId = newVideo.id
+          console.log(`[video-ai] Vertex AI did not return operation name, using local ID: ${jobId}`)
+        } else {
+          jobId = operationName
+          console.log(`[video-ai] Vertex AI returned operation name: ${jobId}`)
+        }
+      } catch (vertexError: any) {
+        console.error('[video-ai] Vertex AI error:', vertexError)
+        console.error('[video-ai] Error message:', vertexError.message)
+        console.error('[video-ai] Error stack:', vertexError.stack)
         newVideo.status = 'failed'
         await insert('videos', newVideo)
-        return NextResponse.json({ error: 'Video generation failed', detail: carubraData }, { status: response.status })
-      }
 
-      const jobId: string | null = carubraData?.id || null
-      if (!jobId) {
-        newVideo.status = 'failed'
-        await insert('videos', newVideo)
-        return NextResponse.json({ error: 'No video job ID returned', detail: carubraData }, { status: 502 })
+        // Handle Vertex AI specific errors
+        const errorMessage = vertexError.message || String(vertexError)
+        
+        if (errorMessage.includes('authentication') || errorMessage.includes('credentials') || errorMessage.includes('UNAUTHENTICATED') || errorMessage.includes('invalid_grant')) {
+          return NextResponse.json(
+            { error: 'Vertex AI authentication failed. Check your GOOGLE_APPLICATION_CREDENTIALS.' },
+            { status: 401 }
+          )
+        }
+        
+        if (errorMessage.includes('quota') || errorMessage.includes('QUOTA_EXCEEDED') || errorMessage.includes('ResourceExhausted')) {
+          return NextResponse.json(
+            { error: 'Vertex AI quota exceeded. Please check your Google Cloud quota limits.' },
+            { status: 429 }
+          )
+        }
+        
+        if (errorMessage.includes('model') || errorMessage.includes('MODEL_NOT_FOUND') || errorMessage.includes('not available') || errorMessage.includes('Model not found')) {
+          return NextResponse.json(
+            { error: 'Vertex AI model unavailable. Check VERTEX_MODEL configuration.' },
+            { status: 400 }
+          )
+        }
+        
+        if (errorMessage.includes('region') || errorMessage.includes('location') || errorMessage.includes('unsupported') || errorMessage.includes('Invalid location')) {
+          return NextResponse.json(
+            { error: 'Vertex AI region unsupported. Check VERTEX_LOCATION configuration.' },
+            { status: 400 }
+          )
+        }
+
+        return NextResponse.json(
+          { error: 'Video generation failed', detail: errorMessage },
+          { status: 502 }
+        )
       }
 
       // Simpan ke DB dengan status processing + jobId
@@ -100,7 +221,23 @@ export async function POST(req: NextRequest) {
         job_id: jobId,
         status: 'processing',
       }
-      await insert('videos', finalVideo)
+
+      let remainingCoins: number
+      try {
+        remainingCoins = await deductUserCoins(user.id, coinsUsed)
+      } catch (coinError: any) {
+        return NextResponse.json(
+          { error: coinError.message ?? 'Unable to deduct coins' },
+          { status: coinError.status ?? 500 }
+        )
+      }
+
+      try {
+        await insert('videos', finalVideo)
+      } catch (dbError) {
+        await creditUserCoins(user.id, coinsUsed).catch(() => null)
+        throw dbError
+      }
 
       // Return 202
       return NextResponse.json({
@@ -108,7 +245,8 @@ export async function POST(req: NextRequest) {
           id: finalVideo.id,
           jobId,
           status: 'processing',
-        }
+        },
+        coins: remainingCoins,
       }, { status: 202 })
 
     } catch (error: any) {
@@ -119,24 +257,23 @@ export async function POST(req: NextRequest) {
       } catch {}
 
       // Detect network / timeout errors and return a clearer message
-      const isConnectError =
-        error?.cause?.code === 'UND_ERR_CONNECT_TIMEOUT' ||
-        error?.cause?.code === 'ECONNREFUSED' ||
-        error?.name === 'AbortError' ||
-        String(error).includes('fetch failed') ||
-        String(error).includes('ConnectTimeout')
-
-      if (isConnectError) {
+      const errorMessage = error?.message || String(error)
+      
+      if (errorMessage.includes('timeout') || errorMessage.includes('AbortError') || errorMessage.includes('ETIMEDOUT')) {
         return NextResponse.json(
-          {
-            error: 'Video generation server is unreachable',
-            detail: `Could not connect to ${fetchUrl}. Please make sure the video server is running and accessible.`,
-          },
-          { status: 503 },
+          { error: 'Vertex AI request timeout. The video generation took too long to respond.' },
+          { status: 504 }
+        )
+      }
+      
+      if (errorMessage.includes('ECONNREFUSED') || errorMessage.includes('fetch failed') || errorMessage.includes('network')) {
+        return NextResponse.json(
+          { error: 'Vertex AI is unreachable. Check your network connection and Vertex AI configuration.' },
+          { status: 503 }
         )
       }
 
-      return NextResponse.json({ error: 'Failed to call video API', detail: String(error) }, { status: 502 })
+      return NextResponse.json({ error: 'Failed to call Vertex AI', detail: errorMessage }, { status: 502 })
     }
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })

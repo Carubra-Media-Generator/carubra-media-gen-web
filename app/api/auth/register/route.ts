@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
     }
 
     const savedUser = await insert('users', newUser)
-    const token = generateToken({ id: savedUser.id, email: savedUser.email, name: savedUser.name })
+    const token = generateToken({ id: savedUser.id, email: savedUser.email, name: savedUser.name, role: savedUser.role ?? 'User' })
     await logUserActivity(savedUser.id, savedUser.email, 'user.signup', 'New user registered').catch(() => null)
 
     return NextResponse.json({

@@ -1,14 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminUser, isAdminUser } from '@/lib/admin'
 import { find } from '@/lib/supabase'
+import { logUserActivity } from '@/lib/log'
+import { expireStaleInvoices } from '@/lib/expire-stale'
 
 export async function GET(req: NextRequest) {
   const admin = await getAdminUser(req)
   if (!isAdminUser(admin)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
+  
+  if (admin) {
+    await logUserActivity(admin.id, admin.email, 'admin.view_transactions', 'Viewed transactions list', {
+      endpoint: '/api/admin/transactions',
+    }).catch(() => null)
+  }
 
   try {
+    await expireStaleInvoices()
+
     const [transactions, packages] = await Promise.all([
       find('transactions', {}, { orderBy: 'created_at', ascending: false, limit: 200 }),
       find('membership_packages', {}, { orderBy: 'created_at', ascending: false, limit: 100 }).catch(() => []),

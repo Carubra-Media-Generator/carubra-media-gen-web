@@ -6,6 +6,10 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { useLanguage } from "@/contexts/language-context"
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog"
+import { AlertTriangle } from "lucide-react"
 
 type TransactionStatus = "success" | "paid" | "pending" | "failed" | "expired" | "refunded"
 
@@ -41,14 +45,7 @@ const statusVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'o
   expired: 'outline',
 }
 
-const statusLabel: Record<string, string> = {
-  success:  'Berhasil',
-  paid:     'Berhasil',
-  pending:  'Menunggu',
-  failed:   'Gagal',
-  refunded: 'Refund',
-  expired:  'Kedaluwarsa',
-}
+const statusLabel: Record<string, string> = {} // replaced by getStatusLabel
 
 function formatIDR(amount: number) {
   return `Rp ${Number(amount).toLocaleString('id-ID')}`
@@ -60,6 +57,8 @@ export default function AdminInvoicesPage() {
   const [filtered, setFiltered] = useState<AdminTransaction[]>([])
   const [summary, setSummary] = useState<Summary | null>(null)
   const [loading, setLoading] = useState(true)
+  const [showErrorModal, setShowErrorModal] = useState(false)
+  const [errorMessage, setErrorMessage] = useState("")
   const [exporting, setExporting] = useState(false)
 
   // Filters
@@ -119,6 +118,18 @@ export default function AdminInvoicesPage() {
   }, [transactions, statusFilter, startDate, endDate, search])
 
   const { t } = useLanguage()
+
+  const getStatusLabel = (status: string) => {
+    const map: Record<string, string> = {
+      success:  t('admin.statusSuccess'),
+      paid:     t('admin.statusSuccess'),
+      pending:  t('admin.statusPending'),
+      failed:   t('admin.statusFailed'),
+      refunded: t('admin.refunded'),
+      expired:  t('admin.statusExpired'),
+    }
+    return map[status] ?? status
+  }
 
   const handleExportCsv = async () => {
     try {
@@ -245,12 +256,12 @@ export default function AdminInvoicesPage() {
       {/* Transaction list */}
       {loading ? (
         <Card className="p-8 text-center">
-          <p className="text-sm text-muted-foreground">Memuat transaksi…</p>
+          <p className="text-sm text-muted-foreground">{t('admin.loadingTransactions')}</p>
         </Card>
       ) : filtered.length === 0 ? (
         <Card className="p-8 text-center border-dashed">
-          <p className="font-semibold">Tidak ada transaksi</p>
-          <p className="text-sm text-muted-foreground mt-1">Coba ubah filter.</p>
+          <p className="font-semibold">{t('admin.noTransactions')}</p>
+          <p className="text-sm text-muted-foreground mt-1">{t('admin.tryDifferentFilter')}</p>
         </Card>
       ) : (
         <div className="space-y-2">
@@ -261,7 +272,7 @@ export default function AdminInvoicesPage() {
                   <div className="space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge variant={statusVariant[tx.status] ?? 'outline'}>
-                        {statusLabel[tx.status] ?? tx.status}
+                        {getStatusLabel(tx.status)}
                       </Badge>
                       <span className="font-mono text-xs text-muted-foreground">{tx.invoiceId}</span>
                       {tx.createdAt && (
@@ -272,34 +283,52 @@ export default function AdminInvoicesPage() {
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-1 text-sm">
                       <div>
-                        <p className="text-xs text-muted-foreground">Paket</p>
+                        <p className="text-xs text-muted-foreground">{t('admin.package')}</p>
                         <p className="font-medium">{tx.packageName}</p>
                       </div>
                       <div>
-                        <p className="text-xs text-muted-foreground">Token</p>
+                        <p className="text-xs text-muted-foreground">{t('admin.token')}</p>
                         <p className="font-medium">{tx.coins}</p>
                       </div>
                       <div>
-                        <p className="text-xs text-muted-foreground">Amount</p>
+                        <p className="text-xs text-muted-foreground">{t('admin.amount')}</p>
                         <p className="font-semibold">{formatIDR(tx.amount)}</p>
                       </div>
                       <div>
-                        <p className="text-xs text-muted-foreground">User ID</p>
+                        <p className="text-xs text-muted-foreground">{t('admin.userId')}</p>
                         <p className="font-mono text-xs truncate max-w-[120px]">{tx.userId}</p>
                       </div>
                     </div>
                     {tx.paidAt && (
                       <p className="text-xs text-muted-foreground">
-                        Dibayar: {new Date(tx.paidAt).toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        {t('admin.dibayar')}{new Date(tx.paidAt).toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       </p>
                     )}
                   </div>
                   <div className="flex flex-col items-end gap-2">
-                    {tx.invoiceUrl && (
-                      <Button size="sm" variant="outline" asChild className="text-xs">
-                        <a href={tx.invoiceUrl} target="_blank" rel="noopener noreferrer">
-                          Buka Invoice
-                        </a>
+                    {(tx.status === "pending" || tx.status === "success" || tx.status === "paid" || tx.status === "expired") && (
+                      <Button size="sm" variant="outline" className="text-xs" onClick={async () => {
+                        try {
+                          const token = localStorage.getItem('carubra-token')
+                          const res = await fetch(`/api/payments/resolve-invoice?orderId=${tx.invoiceId}`, {
+                            headers: { Authorization: `Bearer ${token}` },
+                          })
+                          const data = await res.json()
+                            if (data.status === "pending" && data.invoiceUrl) {
+                            window.open(data.invoiceUrl, "_blank")
+                          } else if (data.status === "success") {
+                            setErrorMessage(t('admin.paymentComplete'))
+                            setShowErrorModal(true)
+                          } else {
+                            setErrorMessage(data.message ?? t('admin.invoiceUnavailable'))
+                            setShowErrorModal(true)
+                          }
+                        } catch {
+                          setErrorMessage(t('admin.openInvoiceFailed'))
+                          setShowErrorModal(true)
+                        }
+                      }}>
+                        {t('admin.openInvoice')}
                       </Button>
                     )}
                   </div>
@@ -312,9 +341,31 @@ export default function AdminInvoicesPage() {
 
       {filtered.length > 0 && (
         <p className="text-xs text-muted-foreground text-center">
-          Menampilkan {filtered.length} transaksi
+          {t('admin.transactionCount', { count: filtered.length })}
         </p>
       )}
+
+      {/* Error Modal */}
+      <Dialog open={showErrorModal} onOpenChange={setShowErrorModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-red-100 rounded-full">
+                <AlertTriangle className="h-5 w-5 text-red-600" />
+              </div>
+              <DialogTitle>{t('admin.warning')}</DialogTitle>
+            </div>
+            <DialogDescription className="pt-2">
+              {errorMessage}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={() => setShowErrorModal(false)}>
+              {t('admin.close')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

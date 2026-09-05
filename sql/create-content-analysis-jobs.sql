@@ -1,24 +1,20 @@
-CREATE TABLE IF NOT EXISTS public.content_analysis_jobs (
+-- Drop existing table to recreate with correct structure
+DROP TABLE IF EXISTS public.content_analysis CASCADE;
+
+-- Create table with correct structure
+CREATE TABLE public.content_analysis (
   id text PRIMARY KEY,
-  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id uuid REFERENCES public.users(id) ON DELETE CASCADE,
   prompt text NOT NULL,
   platform text NOT NULL,
   target_audience text,
+  content_type text,
   status text NOT NULL,
-  result jsonb,
-  created_at timestamp with time zone DEFAULT now()
+  analysis_result jsonb,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
 );
 
-ALTER TABLE public.content_analysis_jobs ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Users can view their own content analysis jobs"
-  ON public.content_analysis_jobs FOR SELECT
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can insert their own content analysis jobs"
-  ON public.content_analysis_jobs FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "Users can update their own content analysis jobs"
-  ON public.content_analysis_jobs FOR UPDATE
-  USING (auth.uid() = user_id);
+CREATE INDEX idx_content_analysis_user_id ON public.content_analysis (user_id);
+CREATE INDEX idx_content_analysis_status ON public.content_analysis (status);
+CREATE INDEX idx_content_analysis_created_at ON public.content_analysis (created_at DESC);

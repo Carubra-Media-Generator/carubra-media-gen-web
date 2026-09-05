@@ -39,6 +39,19 @@ CREATE TABLE IF NOT EXISTS public.social_connects (
   updated_at timestamptz DEFAULT now()
 );
 
+-- OAuth sessions for social media authentication flow
+CREATE TABLE IF NOT EXISTS public.oauth_sessions (
+  state text PRIMARY KEY,
+  user_id uuid REFERENCES public.users(id) ON DELETE CASCADE,
+  platform text NOT NULL,
+  code_verifier text,
+  created_at timestamptz DEFAULT now(),
+  expired_at timestamptz NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_oauth_sessions_user_id ON public.oauth_sessions (user_id);
+CREATE INDEX IF NOT EXISTS idx_oauth_sessions_expired_at ON public.oauth_sessions (expired_at);
+
 -- Scheduled posts
 CREATE TABLE IF NOT EXISTS public.scheduled_posts (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -85,7 +98,7 @@ CREATE TABLE IF NOT EXISTS public.transactions (
   coins_purchased integer DEFAULT 0,
   amount integer DEFAULT 0,
   payment_method text,
-  payment_status text DEFAULT 'pending',
+  payment_status text DEFAULT 'pending' CHECK (payment_status IN ('pending', 'paid', 'failed', 'refunded', 'expired')),
   xendit_invoice_id text,
   xendit_payment_url text,
   invoice_number text,
@@ -177,3 +190,33 @@ CREATE POLICY IF NOT EXISTS "Users can update own avatar"
 ON storage.objects FOR UPDATE
 TO authenticated
 USING (bucket_id = 'avatars' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+-- ─────────────────────────────────────────────────────────────────
+-- SUPABASE STORAGE: Bucket "generated-videos" untuk video AI
+-- Jalankan ini di Supabase SQL Editor ATAU buat bucket manual di
+-- Storage → New bucket → Name: generated-videos → Public: ON
+-- ─────────────────────────────────────────────────────────────────
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('generated-videos', 'generated-videos', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- If bucket already exists and is private, make it public
+UPDATE storage.buckets SET public = true WHERE id = 'generated-videos' AND public = false;
+
+-- Policy: user dapat upload video mereka sendiri
+CREATE POLICY IF NOT EXISTS "Users can upload own video"
+ON storage.objects FOR INSERT
+TO authenticated
+WITH CHECK (bucket_id = 'generated-videos' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+-- Policy: video dapat dibaca siapa saja (public)
+CREATE POLICY IF NOT EXISTS "Generated videos are publicly readable"
+ON storage.objects FOR SELECT
+TO public
+USING (bucket_id = 'generated-videos');
+
+-- Policy: user dapat menghapus video mereka sendiri
+CREATE POLICY IF NOT EXISTS "Users can delete own video"
+ON storage.objects FOR DELETE
+TO authenticated
+USING (bucket_id = 'generated-videos' AND auth.uid()::text = (storage.foldername(name))[1]);

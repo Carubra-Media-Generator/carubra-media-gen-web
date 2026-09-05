@@ -1,4 +1,5 @@
 import { Mail, Phone } from "lucide-react"
+import { useLanguage } from "@/contexts/language-context"
 
 export function CarubraLogo({ className = "" }: { className?: string }) {
   return (
@@ -9,13 +10,14 @@ export function CarubraLogo({ className = "" }: { className?: string }) {
 }
 
 export function CarubraFooter() {
+  const { t } = useLanguage()
   return (
     <footer className="w-full py-8 border-t border-border mt-auto">
       <div className="container mx-auto px-4">
         <div className="flex flex-col items-center gap-4">
           <CarubraLogo className="text-2xl" />
           <p className="text-muted-foreground text-sm">
-            Platform AI Pemasaran Konten Terpadu
+            {t("footer.tagline")}
           </p>
           
           <div className="flex flex-col items-center gap-2 text-sm text-muted-foreground">
@@ -55,7 +57,7 @@ export function CarubraFooter() {
           </div>
           
           <p className="text-xs text-muted-foreground">
-            &copy; 2026 Carubra. Hak cipta dilindungi.
+            &copy; 2026 Carubra. {t("footer.rights")}
           </p>
         </div>
       </div>

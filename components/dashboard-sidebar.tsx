@@ -44,18 +44,18 @@ const defaultNavItems: NavItem[] = [
   { href: "/dashboard/member", icon: Users, labelKey: "nav.member" },
   { href: "/dashboard/video-ai", icon: Video, labelKey: "nav.videoAi" },
   { href: "/dashboard/image-ai", icon: Image, labelKey: "nav.imageAi" },
-  { href: "/dashboard/content-analytics", icon: BarChart2, labelKey: "Content Analytics" },
+  { href: "/dashboard/content-analytics", icon: BarChart2, labelKey: "nav.contentAnalytics" },
   { href: "/dashboard/auto-upload", icon: Upload, labelKey: "nav.autoUpload" },
 ]
 
 const adminNavItems: NavItem[] = [
-  { href: "/dashboard/admin", icon: ShieldCheck, label: "Dashboard" },
-  { href: "/dashboard/admin/users", icon: Users, label: "Manajemen User" },
-  { href: "/dashboard/admin/membership", icon: BarChart2, label: "Manajemen Membership & Transaksi" },
-  { href: "/dashboard/admin/content", icon: FileText, label: "Manajemen Konten" },
-  { href: "/dashboard/admin/pricing", icon: DollarSign, label: "Manajemen Koin & Pricing" },
-  { href: "/dashboard/admin/system", icon: Settings, label: "Pengaturan Sistem & Log" },
-  { href: "/dashboard/admin/docs", icon: BookOpen, label: "Docs Dev" },
+  { href: "/dashboard/admin", icon: ShieldCheck, labelKey: "nav.adminDashboard" },
+  { href: "/dashboard/admin/users", icon: Users, labelKey: "nav.userManagement" },
+  { href: "/dashboard/admin/membership", icon: BarChart2, labelKey: "nav.membershipTransactions" },
+  { href: "/dashboard/admin/content", icon: FileText, labelKey: "nav.contentManagement" },
+  { href: "/dashboard/admin/pricing", icon: DollarSign, labelKey: "nav.coinPricing" },
+  { href: "/dashboard/admin/system", icon: Settings, labelKey: "nav.systemLogs" },
+  { href: "/dashboard/admin/docs", icon: BookOpen, labelKey: "nav.devDocs" },
 ]
 
 
@@ -161,7 +161,7 @@ export function DashboardSidebar() {
               <div className="flex items-center gap-3">
                 <Languages className="h-5 w-5 text-sidebar-foreground" />
                 <span className="text-sm text-sidebar-foreground">
-                  {language === "id" ? "Indonesia" : "English"}
+                  {t(language === "id" ? "nav.indonesia" : "nav.english")}
                 </span>
               </div>
               <Button 
@@ -170,7 +170,7 @@ export function DashboardSidebar() {
                 onClick={toggleLanguage}
                 className="text-xs"
               >
-                {language === "id" ? "EN" : "ID"}
+                {t(language === "id" ? "nav.langEn" : "nav.langId")}
               </Button>
             </div>
 

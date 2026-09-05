@@ -87,11 +87,11 @@ export default function ProfilePage() {
 
     const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"]
     if (!allowedTypes.includes(file.type)) {
-      setAvatarError("Format tidak didukung. Gunakan JPG, PNG, WebP, atau GIF.")
+      setAvatarError(t("profile.formatNotSupported"))
       return
     }
     if (file.size > 5 * 1024 * 1024) {
-      setAvatarError("Ukuran file terlalu besar. Maks 5 MB.")
+      setAvatarError(t("profile.fileTooLarge"))
       return
     }
 
@@ -120,7 +120,7 @@ export default function ProfilePage() {
 
       const data = await res.json()
       if (!res.ok) {
-        setAvatarError(data.error ?? "Gagal mengupload foto.")
+        setAvatarError(data.error ?? t("profile.uploadFailed"))
         return
       }
 
@@ -129,7 +129,7 @@ export default function ProfilePage() {
       setAvatarSuccess(true)
       setTimeout(() => setAvatarSuccess(false), 3000)
     } catch {
-      setAvatarError("Terjadi kesalahan. Coba lagi.")
+      setAvatarError(t("profile.errorTryAgain"))
     } finally {
       setIsUploadingAvatar(false)
     }
@@ -236,7 +236,7 @@ export default function ProfilePage() {
                     ) : (
                       <Upload className="w-3.5 h-3.5" />
                     )}
-                    {isUploadingAvatar ? "Mengupload…" : "Simpan Foto"}
+                    {isUploadingAvatar ? t("profile.uploading") : t("profile.savePhoto")}
                   </Button>
                   <Button
                     type="button"
@@ -247,7 +247,7 @@ export default function ProfilePage() {
                     className="gap-1.5 text-xs text-muted-foreground hover:text-destructive"
                   >
                     <X className="w-3.5 h-3.5" />
-                    Batal
+                    {t("common.cancel")}
                   </Button>
                 </div>
               ) : (
@@ -257,7 +257,7 @@ export default function ProfilePage() {
                   className="text-xs text-emerald-600 hover:text-emerald-500 transition-colors flex items-center gap-1 pt-1"
                 >
                   <Camera className="w-3 h-3" />
-                  Ganti foto profil
+                  {t("profile.changePhoto")}
                 </button>
               )}
 
@@ -266,7 +266,7 @@ export default function ProfilePage() {
                 <p className="text-xs text-destructive">{avatarError}</p>
               )}
               {avatarSuccess && (
-                <p className="text-xs text-emerald-600">✓ Foto profil berhasil diperbarui!</p>
+                <p className="text-xs text-emerald-600">{t("profile.photoUpdated")}</p>
               )}
             </div>
           </div>
@@ -297,7 +297,7 @@ export default function ProfilePage() {
                 {displayVideos}
               </p>
               <p className="text-[11px] font-bold text-muted-foreground/80 tracking-widest uppercase">
-                VIDEO DIBUAT
+                {t("profile.videosCreated")}
               </p>
             </div>
             <div className="rounded-2xl border bg-slate-500/5 dark:bg-slate-400/5 p-6 flex flex-col items-center justify-center text-center shadow-md transition-all duration-300 hover:border-indigo-500/40 hover:shadow-sm hover:scale-[1.01]">
@@ -305,7 +305,7 @@ export default function ProfilePage() {
                 {displaySocials}
               </p>
               <p className="text-[11px] font-bold text-muted-foreground/80 tracking-widest uppercase">
-                PLATFORM TERHUBUNG
+                {t("profile.platformsConnected")}
               </p>
             </div>
           </div>
@@ -476,7 +476,7 @@ export default function ProfilePage() {
                 id="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Masukkan nama lengkap"
+                placeholder={t("profile.namePlaceholder")}
               />
             </div>
 
@@ -487,7 +487,7 @@ export default function ProfilePage() {
                 type="tel"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                placeholder="+62 812-3456-7890"
+                placeholder={t("profile.phonePlaceholder")}
               />
             </div>
 

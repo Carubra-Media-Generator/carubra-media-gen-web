@@ -1,0 +1,15 @@
+warning: in the working copy of 'app/api/image-ai/generate/route.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/api/video-ai/generate/route.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/api/video-ai/status/[jobId]/route.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/dashboard/image-ai/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/dashboard/video-ai/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'components/dashboard-header.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/supabase.ts', LF will be replaced by CRLF the next time Git touches it
+ app/api/image-ai/generate/route.ts       | 31 [32m+++++++++++++++++++++++[m[31m--[m
+ app/api/video-ai/generate/route.ts       | 39 [32m++++++++++++++++++++++++++++[m[31m----[m
+ app/api/video-ai/status/[jobId]/route.ts |  7 [32m+++++[m[31m-[m
+ app/dashboard/image-ai/page.tsx          | 14 [32m+++++++[m[31m-----[m
+ app/dashboard/video-ai/page.tsx          | 18 [32m++++++++[m[31m-------[m
+ components/dashboard-header.tsx          | 16 [32m+++++++++++[m[31m--[m
+ lib/supabase.ts                          | 17 [32m++++++++++[m[31m----[m
+ 7 files changed, 114 insertions(+), 28 deletions(-)

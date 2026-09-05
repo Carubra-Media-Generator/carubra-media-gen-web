@@ -1,14 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminUser, isAdminUser } from '@/lib/admin'
 import { find } from '@/lib/supabase'
+import { logUserActivity } from '@/lib/log'
+import { expireStaleInvoices } from '@/lib/expire-stale'
 
 export async function GET(req: NextRequest) {
   const admin = await getAdminUser(req)
   if (!isAdminUser(admin)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
+  
+  if (admin) {
+    await logUserActivity(admin.id, admin.email, 'admin.view_invoices', 'Viewed invoices list', {
+      endpoint: '/api/admin/invoices',
+    }).catch(() => null)
+  }
 
   try {
+    await expireStaleInvoices()
+
     const { searchParams } = new URL(req.url)
     const status = searchParams.get('status')
     const startDate = searchParams.get('startDate')
@@ -59,20 +69,20 @@ export async function GET(req: NextRequest) {
 
       return {
         id:           tx.id,
-        userId:       tx.user_id,
+        order_id:     tx.order_id ?? tx.invoice_number ?? tx.id,
+        user_id:      tx.user_id,
         userName:     u?.name ?? u?.email ?? '-',
         userEmail:    u?.email ?? '-',
-        packageId:    tx.package_id ?? null,
-        packageName:  meta?.title ?? `Topup ${coins} TOKEN`,
+        package_id:   tx.package_id ?? null,
+        title:        meta?.title ?? `Topup ${coins} TOKEN`,
         coins,
         amount:       tx.amount ?? 0,
-        priceLabel:   meta?.priceLabel ?? (tx.amount ? `Rp ${Number(tx.amount).toLocaleString('id-ID')}` : 'Rp 0'),
+        price_label:  meta?.priceLabel ?? (tx.amount ? `Rp ${Number(tx.amount).toLocaleString('id-ID')}` : 'Rp 0'),
         paymentMethod: tx.payment_method ?? 'xendit',
         status,
-        invoiceId:    tx.invoice_number ?? tx.xendit_invoice_id ?? tx.id,
-        invoiceUrl:   tx.xendit_payment_url ?? null,
-        paidAt:       tx.paid_at ? new Date(tx.paid_at).toISOString() : null,
-        createdAt:    tx.created_at ? new Date(tx.created_at).toISOString() : null,
+        invoice_url:  tx.xendit_payment_url ?? null,
+        paid_at:      tx.paid_at ? new Date(tx.paid_at).toISOString() : null,
+        created_at:   tx.created_at ? new Date(tx.created_at).toISOString() : null,
       }
     })
 

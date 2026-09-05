@@ -35,11 +35,11 @@ type Summary = {
   totalTokensSold: number
 }
 
-const statusConfig: Record<TransactionStatus, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
-  success: { label: 'Berhasil', variant: 'default' },
-  pending: { label: 'Menunggu', variant: 'secondary' },
-  failed: { label: 'Gagal', variant: 'destructive' },
-  expired: { label: 'Kedaluwarsa', variant: 'outline' },
+const statusConfig: Record<TransactionStatus, { labelKey: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
+  success: { labelKey: 'admin.statusSuccess', variant: 'default' },
+  pending: { labelKey: 'admin.statusPending', variant: 'secondary' },
+  failed: { labelKey: 'admin.statusFailed', variant: 'destructive' },
+  expired: { labelKey: 'admin.statusExpired', variant: 'outline' },
 }
 
 function formatIDR(amount: number) {
@@ -113,7 +113,7 @@ export default function AdminInvoicesPage() {
   }
 
   const handleViewInvoice = (orderId: string) => {
-    window.open(`/member/invoice/${orderId}`, '_blank')
+    window.open(`/dashboard/member/invoice/${orderId}`, '_blank')
   }
 
   return (
@@ -187,7 +187,7 @@ export default function AdminInvoicesPage() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Dari Tanggal</label>
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('admin.fromDate')}</label>
               <input
                 type="date"
                 value={startDate}
@@ -197,7 +197,7 @@ export default function AdminInvoicesPage() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Sampai Tanggal</label>
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('admin.toDate')}</label>
               <input
                 type="date"
                 value={endDate}
@@ -225,24 +225,24 @@ export default function AdminInvoicesPage() {
       {/* Transaction list */}
       {loading ? (
         <Card className="p-8 text-center">
-          <p className="text-sm text-muted-foreground">Memuat data transaksi…</p>
+          <p className="text-sm text-muted-foreground">{t('admin.loadingData')}</p>
         </Card>
       ) : transactions.length === 0 ? (
         <Card className="p-8 text-center border-dashed">
-          <p className="font-semibold">Tidak ada transaksi</p>
-          <p className="text-sm text-muted-foreground mt-1">Coba ubah filter atau periode yang dipilih.</p>
+          <p className="font-semibold">{t('admin.noTransactionsFilter')}</p>
+          <p className="text-sm text-muted-foreground mt-1">{t('admin.tryChangeFilter')}</p>
         </Card>
       ) : (
         <div className="space-y-3">
           {/* Table header */}
           <div className="hidden lg:grid grid-cols-[1fr_1.2fr_0.8fr_0.7fr_0.7fr_100px_80px] px-5 py-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">
-            <span>Order ID</span>
-            <span>User</span>
-            <span>Paket</span>
-            <span>Token</span>
-            <span>Harga</span>
-            <span>Status</span>
-            <span className="text-right">Aksi</span>
+            <span>{t('admin.orderId')}</span>
+            <span>{t('admin.user')}</span>
+            <span>{t('admin.package')}</span>
+            <span>{t('admin.token')}</span>
+            <span>{t('admin.amount')}</span>
+            <span>{t('admin.status')}</span>
+            <span className="text-right">{t('admin.action')}</span>
           </div>
 
           {transactions.map(tx => (
@@ -257,20 +257,20 @@ export default function AdminInvoicesPage() {
                       <p className="text-xs text-muted-foreground">{tx.userEmail}</p>
                     </div>
                     <Badge variant={statusConfig[tx.status]?.variant ?? 'outline'}>
-                      {statusConfig[tx.status]?.label ?? tx.status}
+                      {statusConfig[tx.status] ? t(statusConfig[tx.status].labelKey) : tx.status}
                     </Badge>
                   </div>
                   <div className="grid grid-cols-3 gap-3 text-sm">
                     <div>
-                      <p className="text-xs text-muted-foreground">Paket</p>
+                      <p className="text-xs text-muted-foreground">{t('admin.package')}</p>
                       <p className="font-medium">{tx.title}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">Token</p>
+                      <p className="text-xs text-muted-foreground">{t('admin.token')}</p>
                       <p className="font-medium">{tx.coins}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">Harga</p>
+                      <p className="text-xs text-muted-foreground">{t('admin.amount')}</p>
                       <p className="font-medium">{tx.price_label}</p>
                     </div>
                   </div>
@@ -279,7 +279,7 @@ export default function AdminInvoicesPage() {
                       {new Date(tx.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
                     </p>
                     <Button size="sm" variant="outline" onClick={() => handleViewInvoice(tx.order_id)}>
-                      Lihat Invoice
+                      {t('admin.viewInvoice')}
                     </Button>
                   </div>
                 </div>
@@ -297,14 +297,14 @@ export default function AdminInvoicesPage() {
                     <p className="text-xs text-muted-foreground">{tx.userEmail}</p>
                   </div>
                   <p className="text-sm">{tx.title}</p>
-                  <p className="text-sm font-medium">{tx.coins} token</p>
+                  <p className="text-sm font-medium">{tx.coins} {t('admin.token')}</p>
                   <p className="text-sm font-semibold">{tx.price_label}</p>
                   <Badge variant={statusConfig[tx.status]?.variant ?? 'outline'} className="w-fit">
-                    {statusConfig[tx.status]?.label ?? tx.status}
+                    {statusConfig[tx.status] ? t(statusConfig[tx.status].labelKey) : tx.status}
                   </Badge>
                   <div className="text-right">
                     <Button size="sm" variant="ghost" className="text-xs h-7" onClick={() => handleViewInvoice(tx.order_id)}>
-                      Invoice →
+                      {t('admin.invoice')}
                     </Button>
                   </div>
                 </div>
@@ -317,7 +317,7 @@ export default function AdminInvoicesPage() {
       {/* Result count */}
       {!loading && transactions.length > 0 && (
         <p className="text-xs text-muted-foreground text-center">
-          Menampilkan {transactions.length} transaksi
+          {t('admin.transactionCount', { count: transactions.length })}
         </p>
       )}
     </div>
